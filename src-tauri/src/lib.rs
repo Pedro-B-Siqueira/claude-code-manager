@@ -1,3 +1,4 @@
+pub mod attachments;
 pub mod claudegauge;
 pub mod commands;
 pub mod context;
@@ -8,6 +9,7 @@ pub mod hibernation;
 pub mod hooks;
 pub mod layout;
 pub mod library;
+pub mod links;
 pub mod live;
 pub mod notifications;
 pub mod paths;
@@ -28,6 +30,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
 
+use crate::attachments::AttachmentStore;
 use crate::db::Database;
 use crate::error::AppError;
 use crate::hooks::server::{HookEvent, HookHandler, HookServer};
@@ -45,6 +48,7 @@ pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppStat
     let database_file = paths.database_file();
     paths.ensure_writable(&database_file)?;
     let database = Database::open(&database_file)?;
+    let attachments = AttachmentStore::open(&paths)?;
     Ok(AppState {
         paths,
         database,
@@ -57,6 +61,7 @@ pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppStat
         status: StatusTracker::default(),
         notifications: NotificationCenter::default(),
         tray: OnceLock::new(),
+        attachments,
     })
 }
 
@@ -203,6 +208,7 @@ fn log_plugin(paths: &AppPaths) -> tauri::plugin::TauriPlugin<tauri::Wry> {
 fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     let state = build_state(paths, pty_notifier(handle.clone()))?;
+    attachments::start_pruning(state.attachments.clone());
     service::start(&state.paths, state.library_progress.clone(), library_notifier(handle.clone()))?;
     start_hooks(&handle, &state);
     let registry_notifier = handle.clone();
@@ -244,6 +250,13 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::attachments::attachment_save,
+            commands::attachments::attachment_import,
+            commands::attachments::attachment_preview,
+            commands::attachments::attachment_open,
+            commands::attachments::attachment_remove,
+            commands::attachments::attachments_usage,
+            commands::attachments::attachments_clear,
             commands::settings::settings_get,
             commands::settings::settings_update,
             commands::settings::layout_get,
@@ -276,6 +289,7 @@ pub fn run() {
             commands::sessions::app_info,
             commands::sessions::take_notified_session,
             commands::sessions::session_wake,
+            commands::sessions::session_submit_with_images,
             commands::sessions::ui_set_visible,
             commands::dev::dev_scenario,
             commands::git::git_status,
@@ -286,6 +300,7 @@ pub fn run() {
             commands::git::open_vscode,
             commands::git::open_finder,
             commands::git::open_pr,
+            commands::links::open_link,
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {

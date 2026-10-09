@@ -1,6 +1,7 @@
 //! Embedded terminals: one PTY per session, output kept for replay and summarized for cards.
 
 mod manager;
+pub mod paste;
 pub mod preview;
 pub mod ring;
 mod session;
@@ -8,6 +9,7 @@ mod session;
 use std::sync::Arc;
 
 pub use manager::{CommandLine, PtyManager, SpawnRequest};
+pub use paste::{ScreenState, SubmitOutcome};
 pub use session::{LaunchMode, LaunchSpec, SessionSnapshot, now_ms};
 
 /// Receives terminal output for the attached view. Returns `false` once the receiver is gone.

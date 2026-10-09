@@ -73,7 +73,7 @@ claude-code-manager/
 │     │  ├─ sessions/  SessionGrid  SessionCard  StatusBadge  ContextMeter  FileChangeList
 │     │  │             DiffPopover  ActivityFeed  SummaryPanel  TerminalPreview
 │     │  ├─ focus/     FocusView
-│     │  ├─ terminal/  XtermView
+│     │  ├─ terminal/  XtermView  SessionTerminal  AttachmentTray
 │     │  ├─ library/   ResumeModal  HistoryRow  TagEditor
 │     │  ├─ palette/   CommandPalette
 │     │  └─ dialogs/   NewSessionDialog  ConfirmDialog  SettingsDialog
@@ -110,7 +110,7 @@ claude-code-manager/
 | `context.rs` | Janela de contexto por modelo (1M na geração atual, 200K no Haiku 4.5 e anteriores) e porcentagem usada |
 | `library/` | Varredura inicial em segundo plano e indexação incremental para o banco e o FTS, com commits em blocos de linhas (o cursor é salvo na mesma transação, então uma queda nunca conta linha duas vezes) e reindexação quando o arquivo é truncado, trocado ou reescrito no lugar (o byte antes do cursor precisa ser uma quebra de linha). A pasta observada é a canônica, porque o FSEvents reporta caminhos já resolvidos (`/private/var/…`) |
 | `watcher.rs` | `notify` (FSEvents) em `projects/` e `sessions/`, com debounce e sem polling |
-| `pty/` | `portable-pty`, ring buffer de scrollback para o replay, prévia via `vt100`, encerramento por grupo de processos (SIGHUP e, enquanto o grupo ainda existir, SIGKILL depois de alguns segundos) e hibernação. Cada processo tem um número de instância, para que a saída de um processo antigo nunca afete uma sessão reaberta na mesma chave |
+| `pty/` | `portable-pty`, ring buffer de scrollback para o replay, prévia via `vt100`, encerramento por grupo de processos (SIGHUP e, enquanto o grupo ainda existir, SIGKILL depois de alguns segundos) e hibernação. Cada processo tem um número de instância, para que a saída de um processo antigo nunca afete uma sessão reaberta na mesma chave. Envio com imagens: cola os caminhos numa colagem só, espera os `[Image #N]` aparecerem na tela (lida pelo `vt100`, tolerando a quebra de linha que o próprio Claude Code faz) e só então manda o Enter; se não aparecerem em 3 s, não envia. Um envio por sessão de cada vez |
 | `sessions/` | Monta o comando (`<shell> -l -i -c '<claude> …; exec <shell> -l -i'`), remove variáveis herdadas de outros terminais (`TERM_SESSION_ID`, `CLAUDECODE`…) e monta o card de sessão viva |
 | `hooks/` | Servidor HTTP local (`tiny_http`) só em `127.0.0.1`, porta aleatória, corpo limitado a 1 MB e token por sessão comparado em tempo constante. Sempre responde `{}`: observa, nunca decide permissão no lugar do Claude Code. Um erro inesperado ao tratar um evento não derruba o servidor. O arquivo de settings é um por execução do app (`claude-settings-<pid>.json`, gravado de forma atômica; os de execuções encerradas são apagados), não contém segredo, e o token chega ao Claude Code por variável de ambiente (`allowedEnvVars`) |
 | `live/` | Lista de sessões vivas: as do app (status por hooks) e as externas (registro `~/.claude/sessions`, com `ps` + `lsof` como fallback), sem duplicar as que o app abriu. RSS por árvore de processos. FSEvents no registro e checagem de processos vivos a cada 10 s |
@@ -118,6 +118,8 @@ claude-code-manager/
 | `hibernation.rs` | A cada 30 s, encerra sessões do app ociosas além do limite (Ociosa ou Concluída, sem saída no terminal). Nunca as que estão trabalhando, pedindo permissão ou esperando o usuário. `session_wake` reabre com `--resume` na mesma chave |
 | `git.rs` | Consultas com `GIT_OPTIONAL_LOCKS=0` e `GIT_TERMINAL_PROMPT=0`; o diffstat usa `git diff-index --numstat HEAD`, que não regrava o índice (`git diff HEAD` regrava, mesmo com a variável). Branch, diffstat, worktrees (listar, criar, remover só se estiver limpo), branch principal (`origin/HEAD` → `main` → `master`), nome de branch seguro (`slugify`), inferência da pasta de worktrees e URL de compare (GitHub, GitLab, Bitbucket) |
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
+| `attachments.rs` | Imagens coladas ou arrastadas para o terminal, guardadas em `attachments/` na pasta do app. O tipo é conferido pelos primeiros bytes (PNG, JPEG, GIF, WebP), com limite de 20 MB. Ids no formato `<uuid>.<ext>`, então um id nunca aponta para fora da pasta. Arquivos com mais de 3 dias são apagados ao abrir o app e a cada 6 h |
+| `links.rs` | Destino de cada link clicado no terminal: `http`/`https` no navegador, imagem no Preview, outro arquivo no VS Code (ou só mostrado no Finder), pasta mostrada no Finder. Um `file://` só vai direto para o `open` quando é imagem, para que um link para app ou script nunca o execute |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
 | `tray.rs` | Ícone template na barra de menus (desenhado em código), título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |
@@ -149,10 +151,12 @@ claude-code-manager/
 **Comandos (`invoke`).**
 
 - **Biblioteca:** `library_list`, `library_search`, `library_summary`, `library_rename`, `library_pin`, `library_set_tags`, `library_set_category`, `library_tags`, `library_categories`, `library_status`.
-- **Sessões vivas:** `live_list`, `live_session(key)`, `session_new({cwd})`, `session_resume(id)` (reaproveita a sessão se já estiver aberta ou acorda a hibernada), `session_wake(key)` (só troca o terminal depois que o novo processo subiu), `session_close(key)` (encerra o grupo de processos ou remove da grade se já terminou), `recent_dirs`, `app_quit`.
+- **Sessões vivas:** `live_list`, `live_session(key)`, `session_new({cwd})`, `session_resume(id)` (reaproveita a sessão se já estiver aberta ou acorda a hibernada), `session_wake(key)` (só troca o terminal depois que o novo processo subiu), `session_submit_with_images(key, attachmentIds)` (recebe ids, nunca caminhos), `session_close(key)` (encerra o grupo de processos ou remove da grade se já terminou), `recent_dirs`, `app_quit`.
 - **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `library_file_edits(sessionId, filePath)` (últimas edições do arquivo, cada uma com "Por quê" e diff), `library_edit(editId)` e `library_activity(sessionId, limit)`. O diff é montado sob demanda a partir de `old_string`/`new_string` (ou `content`, para um Write), relidos do transcript pelo offset da linha; diff de linhas por LCS com 3 linhas de contexto.
 - **Git:** `git_status(cwd)` (branch e `git diff-index --numstat HEAD`), `worktree_plan` (só calcula: pasta, branch, base), `worktree_create` (recalcula o plano no backend, cria e abre a sessão), `worktree_list`, `worktree_remove` (recusa o principal, worktree com alterações pendentes ou com sessão aberta; nunca `--force`), `open_vscode` (avisa se a branch da pasta difere da sessão, sem checkout), `open_finder`, `open_pr` (PR do transcript → `gh pr view` → URL de compare; nunca cria PR nem faz push).
+- **Anexos:** `attachment_save` (bytes crus no corpo da requisição), `attachment_import(path)`, `attachment_preview(id)`, `attachment_open(id)`, `attachment_remove(id)`, `attachments_usage`, `attachments_clear`.
+- **Links:** `open_link(url)`.
 - **App:** `settings_get`, `settings_update`, `layout_get`/`layout_set` (larguras da barra lateral e do painel do foco), `grid_order_get`/`grid_order_set`, `recent_dirs`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 
 **Eventos (`emit`).**
@@ -209,5 +213,5 @@ SQLite em `~/Library/Application Support/ClaudeCodeManager/ccm.sqlite`. O cache 
 
 - **`npm test`:** roda `cargo test --workspace`, `svelte-check` e `vitest`.
 - **`golden_rules.rs`:** cria um HOME temporário com `~/.claude` populado e em modo somente leitura, exercita o app e confirma que nenhum arquivo ali mudou.
-- **Testes de fluxo:** usam o `fake-claude` para cobrir nova sessão, retomada, status via hooks, hibernação e encerramento (inclusive o SIGKILL de um processo que ignora o SIGHUP).
+- **Testes de fluxo:** usam o `fake-claude` para cobrir nova sessão, retomada, status via hooks, hibernação, encerramento (inclusive o SIGKILL de um processo que ignora o SIGHUP) e o envio com imagens. Como o CLI real, o `fake-claude` lê tecla a tecla, ativa a colagem entre colchetes e troca cada caminho de imagem colado por `[Image #n]`.
 - **Git:** os testes rodam em repositórios temporários e conferem que consultas não alteram `.git/index` e que nenhuma operação muda a branch do checkout principal.

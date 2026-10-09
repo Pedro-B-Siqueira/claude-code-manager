@@ -24,6 +24,8 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ![Modo foco com terminal e resumo](docs/images/foco.png)
 
+**Imagens e links no terminal.** Cole um print com ⌘V ou arraste imagens para o terminal: elas aparecem numa bandeja com miniaturas, saem com um clique no X e vão junto no próximo Enter. ⌘+clique abre links: páginas no navegador, imagens no Preview e arquivos no VS Code.
+
 **Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e o custo. Dá para renomear, fixar, pôr tags e categoria, e retomar no terminal com um clique.
 
 ![Histórico com busca e resumo](docs/images/retomar.png)
@@ -56,7 +58,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 - **Sua configuração do Claude Code não muda.** Os hooks do app entram só nas sessões que ele abre, pela flag `claude --settings`, e se somam aos seus. O arquivo de settings não tem segredo: o token de cada sessão vai por variável de ambiente.
 - **Zero tokens.** O app nunca chama modelo nenhum nem a API da Anthropic, e não lê o token de login.
 - **Git só com confirmação.** As únicas operações que escrevem são criar e remover worktree. A remoção recusa worktrees com alterações pendentes. Nada de `checkout`, `reset`, `stash` ou `--force`.
-- **Dados locais.** Nomes, tags, ordem dos cards, índice de busca e configurações ficam em `~/Library/Application Support/ClaudeCodeManager/`.
+- **Dados locais.** Nomes, tags, ordem dos cards, índice de busca, configurações e as imagens anexadas (apagadas depois de 3 dias) ficam em `~/Library/Application Support/ClaudeCodeManager/`.
 
 ## Instalação
 

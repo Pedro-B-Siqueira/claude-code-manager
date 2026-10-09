@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use portable_pty::{Child, MasterPty, PtySize};
 use serde::Serialize;
 
+use super::paste::ScreenState;
 use super::preview::TerminalScreen;
 use super::ring::OutputRing;
 use super::{OutputSink, PtyEvent, PtyNotifier};
@@ -183,6 +184,11 @@ impl PtySession {
         if !delivered {
             output.subscriber = None;
         }
+    }
+
+    pub fn screen_state(&self) -> ScreenState {
+        let output = lock(&self.output);
+        ScreenState { bracketed_paste: output.screen.bracketed_paste(), image_placeholders: output.screen.image_placeholder_count() }
     }
 
     /// Returns the new preview when output arrived since the last call.

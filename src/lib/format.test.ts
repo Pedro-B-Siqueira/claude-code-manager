@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileName, formatCost, formatDuration, formatMemory, formatRelativeTime, relativePath } from './format';
+import { fileName, formatBytes, formatCost, formatDuration, formatMemory, formatRelativeTime, relativePath } from './format';
 
 describe('format helpers', () => {
   it('formats cost as US dollars in pt-BR', () => {
@@ -38,5 +38,14 @@ describe('time and path helpers', () => {
   it('shows paths relative to the session folder', () => {
     expect(relativePath('/repo/src/a.ts', '/repo')).toBe('src/a.ts');
     expect(relativePath('/other/a.ts', '/repo')).toBe('/other/a.ts');
+  });
+});
+
+describe('formatBytes', () => {
+  it('uses KB below one megabyte and the memory format above', () => {
+    expect(formatBytes(0)).toBe('0 KB');
+    expect(formatBytes(300)).toBe('1 KB');
+    expect(formatBytes(512 * 1024)).toBe('512 KB');
+    expect(formatBytes(34 * 1024 * 1024)).toBe('34 MB');
   });
 });

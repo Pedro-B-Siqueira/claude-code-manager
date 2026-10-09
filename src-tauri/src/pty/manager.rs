@@ -1,17 +1,19 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+use super::paste::{ScreenState, SubmitOutcome, bracketed_paste};
 use super::session::{LaunchSpec, PtySession, SessionParts, SessionSnapshot, spawn_reader};
 use super::{OutputSink, PtyEvent, PtyNotifier};
 use crate::error::AppError;
 
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(400);
+const SUBMIT_POLL: Duration = Duration::from_millis(50);
 const DEFAULT_SIZE: PtySize = PtySize { rows: 32, cols: 120, pixel_width: 0, pixel_height: 0 };
 
 /// Program, arguments and environment for the process that runs inside the PTY.
@@ -35,6 +37,20 @@ pub struct PtyManager {
     notify: PtyNotifier,
     /// Set while the window is hidden: previews are not sent to a UI nobody is looking at.
     previews_paused: Arc<AtomicBool>,
+    /// Sessions with images being pasted right now; a second batch would read the first one's placeholders.
+    submitting: Mutex<HashSet<String>>,
+}
+
+/// Marks a session as sending images until dropped, whatever way the send ends.
+struct SubmitGuard<'a> {
+    submitting: &'a Mutex<HashSet<String>>,
+    key: String,
+}
+
+impl Drop for SubmitGuard<'_> {
+    fn drop(&mut self) {
+        lock(self.submitting).remove(&self.key);
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -43,7 +59,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl PtyManager {
     pub fn new(notify: PtyNotifier) -> Self {
-        let manager = Self { sessions: Arc::default(), notify, previews_paused: Arc::default() };
+        let manager = Self { sessions: Arc::default(), notify, previews_paused: Arc::default(), submitting: Mutex::default() };
         manager.start_preview_ticker();
         manager
     }
@@ -119,6 +135,43 @@ impl PtyManager {
 
     pub fn write(&self, key: &str, bytes: &[u8]) -> Result<(), AppError> {
         Ok(self.session(key)?.write(bytes)?)
+    }
+
+    pub fn screen_state(&self, key: &str) -> Result<ScreenState, AppError> {
+        Ok(self.session(key)?.screen_state())
+    }
+
+    /// Pastes the image paths, waits until one placeholder per image is on screen, then presses
+    /// Enter. Claude Code drops an Enter that arrives while it is still reading pasted images, and
+    /// when the images are not recognized in time nothing is submitted.
+    pub fn submit_with_images(&self, key: &str, paths: &[PathBuf], timeout: Duration) -> Result<SubmitOutcome, AppError> {
+        let session = self.session(key)?;
+        let _guard = self.begin_submit(key)?;
+        let before = session.screen_state();
+        if !before.bracketed_paste {
+            return Err(AppError::Terminal("o Claude Code não está aceitando colagem agora; tente de novo no prompt".to_owned()));
+        }
+        session.write(&bracketed_paste(paths)?)?;
+        let expected = before.image_placeholders + paths.len();
+        let started = Instant::now();
+        loop {
+            let shown = session.screen_state().image_placeholders;
+            if shown >= expected {
+                session.write(b"\r")?;
+                return Ok(SubmitOutcome::Submitted);
+            }
+            if started.elapsed() >= timeout {
+                return Ok(SubmitOutcome::NotRecognized { recognized: shown.saturating_sub(before.image_placeholders) });
+            }
+            thread::sleep(SUBMIT_POLL);
+        }
+    }
+
+    fn begin_submit(&self, key: &str) -> Result<SubmitGuard<'_>, AppError> {
+        if !lock(&self.submitting).insert(key.to_owned()) {
+            return Err(AppError::Terminal("as imagens desta sessão ainda estão sendo enviadas".to_owned()));
+        }
+        Ok(SubmitGuard { submitting: &self.submitting, key: key.to_owned() })
     }
 
     pub fn resize(&self, key: &str, cols: u16, rows: u16) -> Result<(), AppError> {

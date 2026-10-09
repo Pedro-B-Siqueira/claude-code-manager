@@ -2,6 +2,8 @@
 
 mod support;
 
+use std::time::{Duration, SystemTime};
+
 use ccm_lib::db::Database;
 use ccm_lib::library::{indexer::Indexer, queries};
 use ccm_lib::settings::{self, AppSettings, Theme};
@@ -89,4 +91,18 @@ fn app_support_reached_through_a_symlink_into_claude_home_is_refused() {
     let dotted = ccm_lib::paths::AppPaths::new(sandbox.home.clone(), sandbox.claude_home.clone(), sandbox.home.join("x/../.claude/ccm"));
     assert!(ccm_lib::build_state(dotted, std::sync::Arc::new(|_| {})).is_err());
     assert_eq!(sandbox.claude_fingerprint(), before);
+}
+
+#[test]
+fn attachments_stay_in_the_app_folder() {
+    let sandbox = SandboxHome::with_read_only_claude_home();
+    let before = sandbox.claude_fingerprint();
+
+    let state = ccm_lib::build_state(sandbox.paths(), std::sync::Arc::new(|_| {})).expect("state");
+    let saved = state.attachments.save(b"\x89PNG\r\n\x1a\nbody").expect("saved");
+    assert!(saved.path.starts_with(sandbox.app_support.join("attachments")));
+    state.attachments.prune_older_than(Duration::ZERO, SystemTime::now() + Duration::from_secs(1)).expect("prune");
+    state.attachments.clear().expect("clear");
+
+    assert_eq!(sandbox.claude_fingerprint(), before, "~/.claude must stay byte-for-byte identical");
 }

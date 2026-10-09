@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import type { AppSettings, NotificationPreference } from '../../api/types';
   import Dialog from '../common/Dialog.svelte';
+  import AttachmentStorage from './AttachmentStorage.svelte';
 
   interface Props {
     settings: AppSettings;
@@ -89,6 +90,8 @@
       </label>
       <p class="hint">A sessão hibernada encerra o processo e volta com <code class="mono">--resume</code> quando você clica nela.</p>
     </fieldset>
+
+    <AttachmentStorage />
   </form>
 
   {#snippet footer()}

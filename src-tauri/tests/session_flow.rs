@@ -1,29 +1,19 @@
 //! Terminal sessions end to end with the fake `claude` binary (never the real one).
 
+mod support;
+
+use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use ccm_lib::error::AppError;
-use ccm_lib::pty::{CommandLine, LaunchMode, LaunchSpec, OutputSink, PtyEvent, PtyManager, SpawnRequest};
+use ccm_lib::pty::{CommandLine, LaunchMode, LaunchSpec, OutputSink, PtyEvent, PtyManager, SpawnRequest, SubmitOutcome};
 use ccm_lib::shell_env::shell_quote;
+use support::fake_claude_binary;
 
 const WAIT: Duration = Duration::from_secs(10);
-
-/// Always rebuilt (a no-op when up to date) so edits to the fake binary are never tested stale.
-fn fake_claude_binary() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-    let status = Command::new(cargo)
-        .args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"])
-        .arg(manifest.join("Cargo.toml"))
-        .status()
-        .expect("cargo build fake-claude");
-    assert!(status.success());
-    manifest.join("target/debug/fake-claude")
-}
 
 #[derive(Clone, Default)]
 struct CollectingSink(Arc<Mutex<Vec<u8>>>);
@@ -211,3 +201,70 @@ fn a_reused_key_keeps_old_and_new_processes_apart() {
     assert!(!harness.manager.snapshot("reused").unwrap().hibernated, "the new process starts awake");
     harness.manager.close("reused", Duration::from_millis(300)).unwrap();
 }
+
+const PNG: &[u8] = b"\x89PNG\r\n\x1a\nfake";
+const QUICK_TIMEOUT: Duration = Duration::from_millis(800);
+
+fn image_in_app_support(harness: &Harness, name: &str) -> PathBuf {
+    let folder = harness.workdir.path().join("Library/Application Support/ClaudeCodeManager/attachments");
+    fs::create_dir_all(&folder).unwrap();
+    let path = folder.join(name);
+    fs::write(&path, PNG).unwrap();
+    path
+}
+
+#[test]
+fn pasted_images_are_submitted_once_claude_shows_them() {
+    let harness = Harness::new();
+    let sink = harness.spawn("img-ok");
+    wait_until("bracketed paste on", || harness.manager.screen_state("img-ok").is_ok_and(|state| state.bracketed_paste));
+    let images = [image_in_app_support(&harness, "a.png"), image_in_app_support(&harness, "b.png")];
+    let outcome = harness.manager.submit_with_images("img-ok", &images, Duration::from_secs(3)).unwrap();
+    assert_eq!(outcome, SubmitOutcome::Submitted);
+    wait_until("prompt sent with both images", || sink.text().contains("> [Image #1] [Image #2]"));
+}
+
+#[test]
+fn unrecognized_images_are_never_submitted() {
+    let harness = Harness::new();
+    let sink = harness.spawn("img-bad");
+    wait_until("bracketed paste on", || harness.manager.screen_state("img-bad").is_ok_and(|state| state.bracketed_paste));
+    let not_an_image = harness.workdir.path().join("notes.txt");
+    fs::write(&not_an_image, "text").unwrap();
+    let outcome = harness.manager.submit_with_images("img-bad", &[not_an_image], QUICK_TIMEOUT).unwrap();
+    assert_eq!(outcome, SubmitOutcome::NotRecognized { recognized: 0 });
+    thread::sleep(Duration::from_millis(300));
+    assert!(!sink.text().contains("> /"), "Enter must not reach Claude Code");
+}
+
+#[test]
+fn without_bracketed_paste_nothing_is_written() {
+    let harness = Harness::new();
+    let sink = harness.spawn("img-off");
+    wait_until("bracketed paste on", || harness.manager.screen_state("img-off").is_ok_and(|state| state.bracketed_paste));
+    harness.manager.write("img-off", b"nopaste\n").unwrap();
+    wait_until("paste off", || harness.manager.screen_state("img-off").is_ok_and(|state| !state.bracketed_paste));
+    let image = image_in_app_support(&harness, "c.png");
+    assert!(matches!(harness.manager.submit_with_images("img-off", &[image], QUICK_TIMEOUT), Err(AppError::Terminal(_))));
+    thread::sleep(Duration::from_millis(300));
+    assert!(!sink.text().contains("[Image #"));
+}
+
+#[test]
+fn a_session_sends_one_batch_of_images_at_a_time() {
+    let harness = Harness::new();
+    harness.spawn("img-busy");
+    wait_until("bracketed paste on", || harness.manager.screen_state("img-busy").is_ok_and(|state| state.bracketed_paste));
+    let not_an_image = harness.workdir.path().join("slow.txt");
+    fs::write(&not_an_image, "text").unwrap();
+    let image = image_in_app_support(&harness, "d.png");
+    thread::scope(|scope| {
+        let first = scope.spawn(|| harness.manager.submit_with_images("img-busy", std::slice::from_ref(&not_an_image), QUICK_TIMEOUT));
+        thread::sleep(Duration::from_millis(150));
+        let second = harness.manager.submit_with_images("img-busy", std::slice::from_ref(&image), QUICK_TIMEOUT);
+        assert!(matches!(second, Err(AppError::Terminal(_))), "a second batch must wait for the first: {second:?}");
+        assert_eq!(first.join().unwrap().unwrap(), SubmitOutcome::NotRecognized { recognized: 0 });
+    });
+    assert_eq!(harness.manager.submit_with_images("img-busy", &[image], Duration::from_secs(3)).unwrap(), SubmitOutcome::Submitted);
+}
+

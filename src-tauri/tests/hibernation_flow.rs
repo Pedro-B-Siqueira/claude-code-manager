@@ -3,7 +3,6 @@
 mod support;
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -14,17 +13,9 @@ use ccm_lib::pty::{CommandLine, LaunchMode, LaunchSpec, SpawnRequest, now_ms};
 use ccm_lib::settings::{self, AppSettings, HibernationSettings};
 use ccm_lib::state::AppState;
 use ccm_lib::status::status_for_hook;
-use support::SandboxHome;
+use support::{SandboxHome, fake_claude_binary};
 
 const IDLE_MINUTES: u32 = 5;
-
-fn fake_claude_binary() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-    let status = Command::new(cargo).args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"]).arg(manifest.join("Cargo.toml")).status().unwrap();
-    assert!(status.success());
-    manifest.join("target/debug/fake-claude")
-}
 
 fn spawn(state: &AppState, key: &str, cwd: &std::path::Path) {
     let launch = LaunchSpec { session_id: key.to_owned(), cwd: cwd.to_path_buf(), mode: LaunchMode::New, worktree: None };

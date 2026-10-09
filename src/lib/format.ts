@@ -23,6 +23,12 @@ export function formatMemory(megabytes: number): string {
   return `${Math.round(megabytes)} MB`;
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return formatMemory(bytes / (1024 * 1024));
+}
+
 export function fileName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }

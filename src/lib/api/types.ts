@@ -205,3 +205,19 @@ export interface PanelLayout {
   sidebarWidth: number;
   focusPanelWidth: number;
 }
+
+export type AttachmentKind = 'png' | 'jpeg' | 'gif' | 'webp';
+
+export interface Attachment {
+  id: string;
+  path: string;
+  kind: AttachmentKind;
+  bytes: number;
+}
+
+export interface AttachmentUsage {
+  count: number;
+  bytes: number;
+}
+
+export type SubmitOutcome = { kind: 'submitted' } | { kind: 'notRecognized'; recognized: number };

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use tauri::ipc::{Channel, Response};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::claudegauge::ClaudeGaugeStatus;
 use crate::error::AppError;
@@ -10,7 +10,7 @@ use crate::hooks::settings_file::{SESSION_ENV, TOKEN_ENV};
 use crate::library::queries;
 use crate::live::service::live_views;
 use crate::notifications;
-use crate::pty::{LaunchMode, LaunchSpec, OutputSink, SpawnRequest};
+use crate::pty::{LaunchMode, LaunchSpec, OutputSink, SpawnRequest, SubmitOutcome};
 use crate::sessions::launch::{claude_arguments, login_shell_command, resolve_claude};
 use crate::sessions::view::LiveSessionView;
 use crate::settings;
@@ -192,4 +192,18 @@ pub fn app_quit(state: State<'_, AppState>, app: AppHandle) {
     state.quit_confirmed.store(true, std::sync::atomic::Ordering::SeqCst);
     state.pty.shutdown_all(QUIT_GRACE);
     app.exit(0);
+}
+
+const SUBMIT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Ids, not paths, come from the UI: only files from the attachments folder are ever pasted.
+#[tauri::command]
+pub async fn session_submit_with_images(app: AppHandle, key: String, attachment_ids: Vec<String>) -> Result<SubmitOutcome, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let paths = attachment_ids.iter().map(|id| state.attachments.existing(id)).collect::<Result<Vec<_>, _>>()?;
+        state.pty.submit_with_images(&key, &paths, SUBMIT_TIMEOUT)
+    })
+    .await
+    .map_err(|error| AppError::Terminal(error.to_string()))?
 }

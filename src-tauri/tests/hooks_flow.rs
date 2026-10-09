@@ -1,10 +1,11 @@
 //! Hook server security checks and the full chain: fake `claude` reads `--settings`, calls the HTTP
 //! hooks with its session token, and the tracker derives the session status.
 
+mod support;
+
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,6 +16,7 @@ use ccm_lib::hooks::tokens::TokenRegistry;
 use ccm_lib::pty::{CommandLine, LaunchMode, LaunchSpec, OutputSink, PtyManager, SpawnRequest};
 use ccm_lib::shell_env::shell_quote;
 use ccm_lib::status::{SessionStatus, StatusTracker, status_for_hook};
+use support::fake_claude_binary;
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -117,14 +119,6 @@ impl OutputSink for CollectingSink {
         self.0.lock().unwrap().extend_from_slice(bytes);
         true
     }
-}
-
-fn fake_claude_binary() -> PathBuf {
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-    let status = Command::new(cargo).args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"]).arg(manifest.join("Cargo.toml")).status().unwrap();
-    assert!(status.success());
-    manifest.join("target/debug/fake-claude")
 }
 
 #[test]

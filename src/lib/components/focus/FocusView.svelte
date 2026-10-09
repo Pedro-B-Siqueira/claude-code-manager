@@ -11,7 +11,7 @@
   import ResizeHandle from '../common/ResizeHandle.svelte';
   import { FOCUS_PANEL_LIMITS } from '../../stores/layout.svelte';
   import StatusBadge from '../sessions/StatusBadge.svelte';
-  import XtermView from '../terminal/XtermView.svelte';
+  import SessionTerminal from '../terminal/SessionTerminal.svelte';
 
   interface Props {
     sessions: LiveSessionView[];
@@ -125,7 +125,7 @@
           </div>
         {:else}
           {#key active.key}
-            <XtermView sessionKey={active.key} {theme} {scrollback} />
+            <SessionTerminal session={active} {theme} {scrollback} />
           {/key}
         {/if}
       </section>

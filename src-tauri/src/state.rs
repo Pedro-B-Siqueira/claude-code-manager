@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
 
+use crate::attachments::AttachmentStore;
 use crate::claudegauge::{self, ClaudeGaugeStatus};
 use crate::db::Database;
 use crate::hooks::tokens::TokenRegistry;
@@ -26,6 +27,7 @@ pub struct AppState {
     pub status: StatusTracker,
     pub notifications: NotificationCenter,
     pub tray: OnceLock<TrayUpdater>,
+    pub attachments: AttachmentStore,
 }
 
 impl AppState {

@@ -3,6 +3,8 @@ import type {
   ActivityItem,
   AppInfo,
   AppSettings,
+  Attachment,
+  AttachmentUsage,
   EditDetail,
   GitStatus,
   IndexProgress,
@@ -10,6 +12,7 @@ import type {
   SearchHit,
   SessionListItem,
   SessionSummary,
+  SubmitOutcome,
   OpenOutcome,
   PanelLayout,
   WorktreeInfo,
@@ -180,4 +183,41 @@ export function wakeSession(key: string): Promise<LiveSessionView> {
 
 export function setUiVisible(visible: boolean): Promise<void> {
   return invoke<void>('ui_set_visible', { visible });
+}
+
+/** The image goes as the raw request body. */
+export function saveAttachment(bytes: Uint8Array<ArrayBuffer>): Promise<Attachment> {
+  return invoke<Attachment>('attachment_save', bytes);
+}
+
+export function importAttachment(path: string): Promise<Attachment> {
+  return invoke<Attachment>('attachment_import', { path });
+}
+
+export function fetchAttachmentPreview(id: string): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>('attachment_preview', { id });
+}
+
+export function openAttachment(id: string): Promise<void> {
+  return invoke<void>('attachment_open', { id });
+}
+
+export function removeAttachment(id: string): Promise<void> {
+  return invoke<void>('attachment_remove', { id });
+}
+
+export function fetchAttachmentUsage(): Promise<AttachmentUsage> {
+  return invoke<AttachmentUsage>('attachments_usage');
+}
+
+export function clearAttachments(): Promise<AttachmentUsage> {
+  return invoke<AttachmentUsage>('attachments_clear');
+}
+
+export function submitWithImages(key: string, attachmentIds: string[]): Promise<SubmitOutcome> {
+  return invoke<SubmitOutcome>('session_submit_with_images', { key, attachmentIds });
+}
+
+export function openLink(url: string): Promise<void> {
+  return invoke<void>('open_link', { url });
 }

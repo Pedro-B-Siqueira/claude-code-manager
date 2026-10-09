@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '../../api/types';
 import SettingsDialog from './SettingsDialog.svelte';
 
+vi.mock('../../api/commands', () => ({
+  fetchAttachmentUsage: vi.fn(async () => ({ count: 0, bytes: 0 })),
+  clearAttachments: vi.fn(async () => ({ count: 0, bytes: 0 })),
+}));
+
 const SETTINGS: AppSettings = {
   theme: 'dark',
   worktreeRoot: null,

@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::OnceLock;
 
 use ccm_lib::paths::AppPaths;
 use tempfile::TempDir;
@@ -108,4 +110,23 @@ fn apply_mode_recursively(path: &Path, directory_mode: u32, file_mode: u32) {
     } else {
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(file_mode));
     }
+}
+
+/// Built once per test binary. Every `cargo build` re-links `target/debug/fake-claude`, even when
+/// nothing changed, and a test executing it during the re-link hangs or is killed by macOS.
+pub fn fake_claude_binary() -> PathBuf {
+    static BINARY: OnceLock<PathBuf> = OnceLock::new();
+    BINARY
+        .get_or_init(|| {
+            let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+            let status = Command::new(cargo)
+                .args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"])
+                .arg(manifest.join("Cargo.toml"))
+                .status()
+                .expect("cargo build fake-claude");
+            assert!(status.success());
+            manifest.join("target/debug/fake-claude")
+        })
+        .clone()
 }
