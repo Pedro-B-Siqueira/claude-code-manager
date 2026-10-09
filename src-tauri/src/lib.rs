@@ -1,8 +1,12 @@
+pub mod claudegauge;
 pub mod commands;
 pub mod context;
 pub mod db;
 pub mod error;
+pub mod hooks;
 pub mod library;
+pub mod live;
+pub mod notifications;
 pub mod paths;
 pub mod pricing;
 pub mod pty;
@@ -10,20 +14,27 @@ pub mod sessions;
 pub mod settings;
 pub mod shell_env;
 pub mod state;
+pub mod status;
 pub mod transcript;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
 
 use crate::db::Database;
 use crate::error::AppError;
+use crate::hooks::server::{HookEvent, HookHandler, HookServer};
+use crate::hooks::settings_file;
+use crate::hooks::tokens::TokenRegistry;
 use crate::library::service::{self, LibraryNotice, LibraryNotifier};
+use crate::notifications::NotificationCenter;
 use crate::paths::AppPaths;
-use crate::pty::{PtyEvent, PtyManager, PtyNotifier};
+use crate::pty::{PtyEvent, PtyManager, PtyNotifier, now_ms};
 use crate::state::AppState;
+use crate::status::StatusTracker;
 
 pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppState, AppError> {
     paths.create_app_support()?;
@@ -37,6 +48,23 @@ pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppStat
         pty: PtyManager::new(pty_notifier),
         shell_environment: OnceLock::new(),
         quit_confirmed: AtomicBool::new(false),
+        hook_tokens: Arc::new(TokenRegistry::default()),
+        hook_settings_file: OnceLock::new(),
+        status: StatusTracker::default(),
+        notifications: NotificationCenter::default(),
+    })
+}
+
+fn emit_or_log<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
+    if let Err(error) = app.emit(event, payload) {
+        log::warn!("falha ao notificar a interface ({event}): {error}");
+    }
+}
+
+fn library_notifier(app: AppHandle) -> LibraryNotifier {
+    Arc::new(move |notice| match notice {
+        LibraryNotice::Progress(progress) => emit_or_log(&app, "library:progress", progress),
+        LibraryNotice::Changed => emit_or_log(&app, "library:changed", ()),
     })
 }
 
@@ -55,59 +83,103 @@ struct ExitPayload {
 }
 
 fn pty_notifier(app: AppHandle) -> PtyNotifier {
-    Arc::new(move |event| {
-        let emitted = match event {
-            PtyEvent::PreviewChanged { key, lines } => app.emit("session:preview", PreviewPayload { key, lines }),
-            PtyEvent::Exited { key, code } => {
-                commands::sessions::notify_live_changed(&app);
-                app.emit("session:exited", ExitPayload { key, code })
+    Arc::new(move |event| match event {
+        PtyEvent::PreviewChanged { key, lines } => emit_or_log(&app, "session:preview", PreviewPayload { key, lines }),
+        PtyEvent::Exited { key, code } => {
+            if let Some(state) = app.try_state::<AppState>() {
+                state.hook_tokens.revoke(&key);
             }
-        };
-        if let Err(error) = emitted {
-            log::warn!("falha ao notificar a interface: {error}");
+            emit_or_log(&app, "live:changed", ());
+            emit_or_log(&app, "session:exited", ExitPayload { key, code });
         }
     })
 }
 
-/// Quitting with sessions still running needs the user's confirmation, asked by the UI.
+fn hook_handler(app: AppHandle) -> HookHandler {
+    Arc::new(move |event: HookEvent| {
+        let Some(state) = app.try_state::<AppState>() else { return };
+        let Some(update) = status::status_for_hook(&event.payload) else { return };
+        let Some(transition) = state.status.apply(&event.session_key, update, now_ms()) else { return };
+        emit_or_log(&app, "session:status", transition.clone());
+        emit_or_log(&app, "live:changed", ());
+        announce(&app, &state, &transition);
+    })
+}
+
+fn announce(app: &AppHandle, state: &AppState, transition: &status::StatusTransition) {
+    let preference = settings::load(&state.database).map(|settings| settings.notifications).unwrap_or_default();
+    if !notifications::enabled(preference, state.claudegauge()) {
+        return;
+    }
+    let title = state
+        .pty
+        .snapshot(&transition.key)
+        .ok()
+        .and_then(|snapshot| library::queries::session_summary(&state.database.connection(), &snapshot.launch.session_id).ok().flatten())
+        .map(|summary| summary.item.title)
+        .unwrap_or_else(|| "Claude Code".to_owned());
+    state.notifications.announce(app, &title, transition);
+}
+
+/// Hooks are optional: if the local server cannot start, sessions still open, just without them.
+fn start_hooks(app: &AppHandle, state: &AppState) {
+    let server = match HookServer::start(Arc::clone(&state.hook_tokens), hook_handler(app.clone())) {
+        Ok(server) => server,
+        Err(error) => {
+            log::warn!("servidor de hooks indisponível; status virá só do terminal: {error}");
+            return;
+        }
+    };
+    match settings_file::write_settings(&state.paths, server.port()) {
+        Ok(file) => {
+            let _ = state.hook_settings_file.set(file);
+        }
+        Err(error) => log::warn!("não foi possível gravar o arquivo de hooks: {error}"),
+    }
+}
+
+/// Quitting while a session is working or asking for permission needs the user's confirmation.
 fn needs_quit_confirmation(app: &AppHandle) -> bool {
     let state = app.state::<AppState>();
     if state.quit_confirmed.load(Ordering::SeqCst) {
         return false;
     }
-    let running = state.pty.running_keys().len();
-    if running == 0 {
+    let now = now_ms();
+    let hooks_active = state.hook_settings_file.get().is_some();
+    let busy = state
+        .pty
+        .running_keys()
+        .iter()
+        .filter(|key| !hooks_active || state.status.current(key, now).is_some_and(|current| current.status.is_busy()))
+        .count();
+    if busy == 0 {
         return false;
     }
-    if let Err(error) = app.emit("app:close-requested", running) {
-        log::warn!("falha ao pedir confirmação de saída: {error}");
-        return false;
-    }
+    emit_or_log(app, "app:close-requested", busy);
     true
-}
-
-fn library_notifier(app: AppHandle) -> LibraryNotifier {
-    Arc::new(move |notice| {
-        let emitted = match notice {
-            LibraryNotice::Progress(progress) => app.emit("library:progress", progress),
-            LibraryNotice::Changed => app.emit("library:changed", ()),
-        };
-        if let Err(error) = emitted {
-            log::warn!("falha ao notificar a interface: {error}");
-        }
-    })
 }
 
 fn log_plugin(paths: &AppPaths) -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_log::Builder::new()
         .clear_targets()
         .target(Target::new(TargetKind::Stdout))
-        .target(Target::new(TargetKind::Folder {
-            path: paths.logs_dir(),
-            file_name: Some("ccm".to_owned()),
-        }))
+        .target(Target::new(TargetKind::Folder { path: paths.logs_dir(), file_name: Some("ccm".to_owned()) }))
         .level(log::LevelFilter::Info)
         .build()
+}
+
+fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error::Error>> {
+    let handle = app.handle().clone();
+    let state = build_state(paths, pty_notifier(handle.clone()))?;
+    service::start(&state.paths, state.library_progress.clone(), library_notifier(handle.clone()))?;
+    start_hooks(&handle, &state);
+    let registry_notifier = handle.clone();
+    live::watcher::start(state.paths.claude_home(), Arc::new(move || emit_or_log(&registry_notifier, "live:changed", ())));
+    app.manage(state);
+    std::thread::spawn(move || {
+        handle.state::<AppState>().shell();
+    });
+    Ok(())
 }
 
 pub fn run() {
@@ -121,16 +193,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(log_plugin(&paths))
         .plugin(tauri_plugin_dialog::init())
-        .setup(move |app| {
-            let state = build_state(paths, pty_notifier(app.handle().clone()))?;
-            service::start(&state.paths, state.library_progress.clone(), library_notifier(app.handle().clone()))?;
-            app.manage(state);
-            let warm_up = app.handle().clone();
-            std::thread::spawn(move || {
-                warm_up.state::<AppState>().shell();
-            });
-            Ok(())
-        })
+        .plugin(tauri_plugin_notification::init())
+        .setup(move |app| setup(app, paths))
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if needs_quit_confirmation(window.app_handle()) {
@@ -155,13 +219,14 @@ pub fn run() {
             commands::sessions::session_resume,
             commands::sessions::session_close,
             commands::sessions::live_list,
-            commands::sessions::live_session,
             commands::sessions::pty_attach,
             commands::sessions::pty_detach,
             commands::sessions::pty_write,
             commands::sessions::pty_resize,
             commands::sessions::recent_dirs,
             commands::sessions::app_quit,
+            commands::sessions::app_info,
+            commands::sessions::take_notified_session,
             commands::dev::dev_scenario,
         ])
         .build(tauri::generate_context!())
@@ -171,7 +236,7 @@ pub fn run() {
         })
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, .. } if needs_quit_confirmation(app) => api.prevent_exit(),
-            RunEvent::Exit => app.state::<AppState>().pty.shutdown_all(std::time::Duration::from_secs(2)),
+            RunEvent::Exit => app.state::<AppState>().pty.shutdown_all(Duration::from_secs(2)),
             _ => {}
         });
 }

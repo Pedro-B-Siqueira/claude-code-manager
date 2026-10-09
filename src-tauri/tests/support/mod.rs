@@ -26,7 +26,18 @@ impl SandboxHome {
         let claude_home = home.join(".claude");
         let app_support = home.join("Library/Application Support/ClaudeCodeManager");
         fs::create_dir_all(claude_home.join("projects")).expect("claude dirs");
-        fs::write(claude_home.join("settings.json"), r#"{"hooks":{}}"#).expect("settings");
+        fs::write(
+            claude_home.join("settings.json"),
+            r#"{"hooks":{"Notification":[{"hooks":[{"type":"command","command":"/Applications/ClaudeGauge.app/Contents/Resources/claude-notify.sh attention"}]}]}}"#,
+        )
+        .expect("settings");
+        fs::create_dir_all(claude_home.join("sessions")).expect("registry dir");
+        let own_pid = std::process::id();
+        fs::write(
+            claude_home.join(format!("sessions/{own_pid}.json")),
+            format!(r#"{{"pid":{own_pid},"sessionId":"{}","cwd":"/tmp/ccm-fixture/demo-app","status":"busy"}}"#, fixtures::DEMO_SESSION_ID),
+        )
+        .expect("registry entry");
         fixtures::install_demo_session(&claude_home.join("projects"));
         fs::write(home.join(".claude.json"), "{}").expect("user config");
         set_read_only_recursively(&claude_home);

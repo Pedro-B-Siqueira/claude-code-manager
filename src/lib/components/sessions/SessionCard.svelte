@@ -19,6 +19,7 @@
   let { session, onFocus, onEnd, onResume, onRemove }: Props = $props();
 
   const menuActions = $derived.by((): MenuAction[] => {
+    if (session.origin === 'external') return [];
     if (session.exited) {
       return [
         ...(onResume ? [{ id: 'resume', label: 'Retomar sessão', run: () => onResume(session) }] : []),
@@ -33,7 +34,7 @@
   <header class="head">
     <StatusBadge status={session.status} hibernated={session.hibernated} />
     {#if session.origin === 'external'}
-      <span class="origin" title="Sessão aberta fora do app">externa</span>
+      <span class="origin" title="Sessão aberta em outro terminal; o app só acompanha">externa</span>
     {/if}
     {#if session.exited}
       <span class="origin" title="O processo terminou; a conversa continua retomável">encerrada</span>
@@ -56,7 +57,7 @@
   </div>
 
   {#if session.status === 'permission' && session.statusDetail}
-    <p class="permission mono" title="Comando pedido">$ {session.statusDetail}</p>
+    <p class="permission mono" title="O que a sessão pediu para executar">{session.statusDetail}</p>
   {/if}
 
   <TerminalPreview lines={session.previewLines} />

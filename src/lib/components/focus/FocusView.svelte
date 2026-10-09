@@ -49,7 +49,14 @@
 
     <div class="body">
       <section class="terminal" aria-label="Terminal">
-        {#if active.exited}
+        {#if active.origin === 'external'}
+          <div class="ended">
+            <p>Esta sessão está aberta em outro terminal{active.pid ? ` (pid ${active.pid})` : ''}. O app só acompanha o andamento.</p>
+            {#if active.previewLines.length > 0}
+              <pre class="last-words mono">{active.previewLines.join('\n')}</pre>
+            {/if}
+          </div>
+        {:else if active.exited}
           <div class="ended">
             <p>O terminal desta sessão foi encerrado. A conversa continua salva.</p>
             <button type="button" class="button-primary" onclick={() => onResume(active)}>
@@ -191,6 +198,19 @@
 
   .ended p {
     margin: 0;
+  }
+
+  .last-words {
+    max-width: 640px;
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    text-align: left;
+    white-space: pre-wrap;
+    user-select: text;
   }
 
   .panel {

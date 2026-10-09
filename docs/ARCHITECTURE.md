@@ -107,11 +107,13 @@ claude-code-manager/
 | `live/` | Registro de sessões vivas, fallback por processos e RSS por PID |
 | `pty/` | `portable-pty`, ring buffer de scrollback para o replay, prévia via `vt100`, encerramento por grupo de processos (SIGHUP e, depois de alguns segundos, SIGKILL) e hibernação |
 | `sessions/` | Monta o comando (`<shell> -l -i -c '<claude> …; exec <shell> -l -i'`), remove variáveis herdadas de outros terminais (`TERM_SESSION_ID`, `CLAUDECODE`…) e monta o card de sessão viva |
-| `hooks/` | Servidor HTTP local em `127.0.0.1` com porta aleatória e o arquivo de settings gerado a cada execução. O token de cada sessão vai por variável de ambiente, nunca para o disco |
+| `hooks/` | Servidor HTTP local (`tiny_http`) só em `127.0.0.1`, porta aleatória, corpo limitado a 1 MB e token por sessão comparado em tempo constante. Sempre responde `{}`: observa, nunca decide permissão no lugar do Claude Code. O arquivo de settings é regravado a cada execução (a porta muda) e não contém segredo; o token chega ao Claude Code por variável de ambiente (`allowedEnvVars`) |
+| `live/` | Lista de sessões vivas: as do app (status por hooks) e as externas (registro `~/.claude/sessions`, com `ps` + `lsof` como fallback), sem duplicar as que o app abriu. RSS por árvore de processos. FSEvents no registro e checagem de processos vivos a cada 10 s |
 | `status.rs` | Máquina de estados das sessões |
 | `git.rs` | Branch, diffstat e worktrees (listar, criar, remover se estiver limpo) |
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
-| `claudegauge.rs` | Detecção do hook do ClaudeGauge (só leitura) |
+| `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
+| `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
 | `notifications.rs` · `tray.rs` | Notificações de sistema e ícone na barra de menus |
 | `commands/` | Handlers finos por domínio |
 
@@ -145,14 +147,14 @@ claude-code-manager/
 - **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `session_files`, `session_activity`, `edit_detail(editId)`. O diff é carregado sob demanda, relido do transcript pelo offset da linha.
 - **Git:** `git_status`, `worktree_list`, `worktree_create`, `worktree_remove`, `open_vscode`, `open_finder`, `open_pr`.
-- **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info`.
+- **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 
 **Eventos (`emit`).**
 
 | Evento | Quando dispara |
 |---|---|
 | `live:changed` | Lista de sessões vivas ou RSS mudou |
-| `session:status` | Status de uma sessão mudou |
+| `session:status` | Status de uma sessão do app mudou (transição vinda de um hook) |
 | `session:delta` | Tokens, custo, contexto ou arquivos mudaram |
 | `session:activity` | Nova atividade na sessão |
 | `session:exited` | O processo da sessão saiu |

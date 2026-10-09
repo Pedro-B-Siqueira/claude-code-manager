@@ -1,18 +1,25 @@
 <script lang="ts">
-  import type { SessionListItem } from '../../api/types';
+  import type { AppInfo, SessionListItem } from '../../api/types';
   import type { ProjectGroup } from '../../stores/live.svelte';
   import Icon from '../common/Icon.svelte';
 
   interface Props {
     pinned: SessionListItem[];
     projects: ProjectGroup[];
-    claudeGaugeDetected: boolean;
+    appInfo: AppInfo | null;
     onNewSession: () => void;
     onResume: () => void;
     onOpenPinned: (sessionId: string) => void;
   }
 
-  let { pinned, projects, claudeGaugeDetected, onNewSession, onResume, onOpenPinned }: Props = $props();
+  let { pinned, projects, appInfo, onNewSession, onResume, onOpenPinned }: Props = $props();
+
+  const gaugeLabel = $derived.by(() => {
+    const gauge = appInfo?.claudegauge;
+    if (!gauge) return 'ClaudeGauge: verificando…';
+    if (gauge.hookInstalled) return 'ClaudeGauge ativo · notificações dele';
+    return gauge.appInstalled ? 'ClaudeGauge instalado' : 'ClaudeGauge não detectado';
+  });
 </script>
 
 <aside class="sidebar">
@@ -63,11 +70,15 @@
   <footer class="footer">
     <p class="footer-line">
       <Icon name="gauge" size={13} />
-      ClaudeGauge: {claudeGaugeDetected ? 'detectado' : 'não detectado'}
+      {gaugeLabel}
     </p>
-    <p class="footer-line">
+    <p class="footer-line" title="Os hooks entram só nas sessões abertas pelo app">
       <Icon name="shield" size={13} />
-      <span>Hooks via <code class="mono">--settings</code> · config global intocada</span>
+      {#if appInfo && !appInfo.hooksActive}
+        <span>Hooks indisponíveis · status pelo terminal</span>
+      {:else}
+        <span>Hooks via <code class="mono">--settings</code> · config global intocada</span>
+      {/if}
     </p>
   </footer>
 </aside>

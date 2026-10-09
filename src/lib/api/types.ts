@@ -48,10 +48,22 @@ export interface LiveSessionView {
   costUsd: number;
   memoryMb: number | null;
   origin: SessionOrigin;
+  pid: number | null;
   hibernated: boolean;
   pinned: boolean;
   exited: boolean;
   startedAt: number;
+}
+
+export interface ClaudeGaugeStatus {
+  appInstalled: boolean;
+  hookInstalled: boolean;
+}
+
+export interface AppInfo {
+  claudegauge: ClaudeGaugeStatus;
+  notificationsEnabled: boolean;
+  hooksActive: boolean;
 }
 
 export interface TokenUsage {

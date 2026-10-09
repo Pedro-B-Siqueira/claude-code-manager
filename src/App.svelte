@@ -5,13 +5,15 @@
   import Sidebar from './lib/components/layout/Sidebar.svelte';
   import TopBar from './lib/components/layout/TopBar.svelte';
   import ViewToggle from './lib/components/layout/ViewToggle.svelte';
-  import { quitApp } from './lib/api/commands';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { quitApp, takeNotifiedSession } from './lib/api/commands';
   import { onCloseRequested } from './lib/api/events';
   import type { LiveSessionView } from './lib/api/types';
   import ConfirmDialog from './lib/components/dialogs/ConfirmDialog.svelte';
   import NewSessionDialog from './lib/components/dialogs/NewSessionDialog.svelte';
   import ResumeModal from './lib/components/library/ResumeModal.svelte';
   import SessionGrid from './lib/components/sessions/SessionGrid.svelte';
+  import { appInfoStore } from './lib/stores/app-info.svelte';
   import { libraryStore } from './lib/stores/library.svelte';
   import { liveSessionsStore } from './lib/stores/live.svelte';
   import { settingsStore } from './lib/stores/settings.svelte';
@@ -21,13 +23,23 @@
     void settingsStore.load();
     void libraryStore.start();
     void liveSessionsStore.start();
+    void appInfoStore.refresh();
     void onCloseRequested((runningSessions) => (uiStore.confirmation = { kind: 'quit', runningSessions }));
+    void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (focused) void openNotifiedSession();
+    });
     if (import.meta.env.DEV) void import('./lib/dev/scenario').then(({ runDevScenario }) => runDevScenario());
   });
 
   function openResume(sessionId: string | null = null): void {
     uiStore.resumeOpen = true;
     if (sessionId) void libraryStore.select(sessionId);
+  }
+
+  /** Clicking a notification activates the app; open the session it was about. */
+  async function openNotifiedSession(): Promise<void> {
+    const key = await takeNotifiedSession().catch(() => null);
+    if (key && liveSessionsStore.find(key)) uiStore.focusSession(key);
   }
 
   async function resumeById(sessionId: string): Promise<void> {
@@ -63,7 +75,7 @@
     <Sidebar
       pinned={libraryStore.pinned}
       projects={liveSessionsStore.projects}
-      claudeGaugeDetected={true}
+      appInfo={appInfoStore.current}
       onNewSession={() => (uiStore.newSessionOpen = true)}
       onResume={() => openResume()}
       onOpenPinned={(sessionId) => openResume(sessionId)}

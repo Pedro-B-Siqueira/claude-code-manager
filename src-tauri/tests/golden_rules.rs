@@ -59,3 +59,22 @@ fn indexing_transcripts_never_touches_claude_home() {
     assert_eq!(queries::list_sessions(&state.database.connection()).expect("list").len(), 1);
     assert_eq!(sandbox.claude_fingerprint(), before, "~/.claude must stay byte-for-byte identical");
 }
+
+#[test]
+fn hooks_registry_and_claudegauge_detection_stay_read_only() {
+    let sandbox = SandboxHome::with_read_only_claude_home();
+    let before = sandbox.claude_fingerprint();
+
+    let state = ccm_lib::build_state(sandbox.paths(), std::sync::Arc::new(|_| {})).expect("state");
+    let settings_file = ccm_lib::hooks::settings_file::write_settings(&state.paths, 4242).expect("hook settings written");
+    assert!(settings_file.starts_with(&sandbox.app_support), "hook settings live in the app folder");
+    assert!(ccm_lib::claudegauge::detect(&sandbox.claude_home, &sandbox.home).hook_installed);
+    assert_eq!(ccm_lib::live::registry::read_registry(&sandbox.claude_home).len(), 1);
+    let refused = ccm_lib::hooks::settings_file::write_settings(
+        &ccm_lib::paths::AppPaths::new(sandbox.home.clone(), sandbox.claude_home.clone(), sandbox.claude_home.join("app")),
+        1,
+    );
+    assert!(refused.is_err(), "hook settings can never be written inside ~/.claude");
+
+    assert_eq!(sandbox.claude_fingerprint(), before, "~/.claude must stay byte-for-byte identical");
+}

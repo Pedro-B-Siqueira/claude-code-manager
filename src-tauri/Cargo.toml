@@ -34,6 +34,8 @@ vt100 = "0.16"
 uuid = { version = "1", features = ["v4"] }
 libc = "0.2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tiny_http = "0.12"
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
 

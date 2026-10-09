@@ -1,5 +1,5 @@
 import { invoke, type Channel } from '@tauri-apps/api/core';
-import type { AppSettings, IndexProgress, LiveSessionView, SearchHit, SessionListItem, SessionSummary } from './types';
+import type { AppInfo, AppSettings, IndexProgress, LiveSessionView, SearchHit, SessionListItem, SessionSummary } from './types';
 
 export function fetchSettings(): Promise<AppSettings> {
   return invoke<AppSettings>('settings_get');
@@ -89,4 +89,12 @@ export function resizeTerminal(key: string, cols: number, rows: number): Promise
 
 export function quitApp(): Promise<void> {
   return invoke<void>('app_quit');
+}
+
+export function fetchAppInfo(): Promise<AppInfo> {
+  return invoke<AppInfo>('app_info');
+}
+
+export function takeNotifiedSession(): Promise<string | null> {
+  return invoke<string | null>('take_notified_session');
 }
