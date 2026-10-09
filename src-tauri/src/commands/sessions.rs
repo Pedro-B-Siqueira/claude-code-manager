@@ -1,0 +1,125 @@
+use std::path::PathBuf;
+use std::time::Duration;
+
+use tauri::ipc::{Channel, Response};
+use tauri::{AppHandle, Emitter, State};
+
+use crate::error::AppError;
+use crate::library::queries;
+use crate::pty::{LaunchMode, LaunchSpec, OutputSink, SessionSnapshot, SpawnRequest};
+use crate::sessions::launch::{claude_arguments, login_shell_command, resolve_claude};
+use crate::sessions::view::{LiveSessionView, build_view};
+use crate::settings;
+use crate::state::AppState;
+
+const CLOSE_GRACE: Duration = Duration::from_secs(3);
+const QUIT_GRACE: Duration = Duration::from_secs(3);
+
+struct ChannelSink(Channel<Response>);
+
+impl OutputSink for ChannelSink {
+    fn deliver(&self, bytes: &[u8]) -> bool {
+        self.0.send(Response::new(bytes.to_vec())).is_ok()
+    }
+}
+
+fn launch(state: &AppState, app: &AppHandle, launch: LaunchSpec) -> Result<LiveSessionView, AppError> {
+    let app_settings = settings::load(&state.database)?;
+    let shell = state.shell();
+    let claude = resolve_claude(app_settings.claude_binary.as_deref(), shell, state.paths.home())?;
+    let key = uuid::Uuid::new_v4().to_string();
+    let arguments = claude_arguments(&launch, None);
+    let command = login_shell_command(shell, &claude, &arguments, Vec::new());
+    let snapshot = state.pty.spawn(SpawnRequest { key, launch, command, scrollback_lines: app_settings.scrollback_lines })?;
+    notify_live_changed(app);
+    build_view(&state.database.connection(), &snapshot)
+}
+
+pub fn notify_live_changed(app: &AppHandle) {
+    if let Err(error) = app.emit("live:changed", ()) {
+        log::warn!("falha ao notificar a interface: {error}");
+    }
+}
+
+#[tauri::command]
+pub async fn session_new(state: State<'_, AppState>, app: AppHandle, cwd: String) -> Result<LiveSessionView, AppError> {
+    let spec = LaunchSpec {
+        session_id: uuid::Uuid::new_v4().to_string(),
+        cwd: PathBuf::from(cwd),
+        mode: LaunchMode::New,
+        worktree: None,
+    };
+    launch(&state, &app, spec)
+}
+
+#[tauri::command]
+pub async fn session_resume(state: State<'_, AppState>, app: AppHandle, session_id: String) -> Result<LiveSessionView, AppError> {
+    let already_open = state.pty.snapshots().into_iter().find(|snapshot| snapshot.launch.session_id == session_id && !snapshot.exited);
+    if let Some(snapshot) = already_open {
+        return build_view(&state.database.connection(), &snapshot);
+    }
+    let summary = queries::session_summary(&state.database.connection(), &session_id)?.ok_or_else(|| AppError::UnknownSession(session_id.clone()))?;
+    let cwd = summary.item.cwd.ok_or_else(|| AppError::UnknownSession(session_id.clone()))?;
+    let spec = LaunchSpec { session_id, cwd: PathBuf::from(cwd), mode: LaunchMode::Resume, worktree: None };
+    launch(&state, &app, spec)
+}
+
+#[tauri::command]
+pub async fn session_close(state: State<'_, AppState>, app: AppHandle, key: String) -> Result<(), AppError> {
+    state.pty.close(&key, CLOSE_GRACE)?;
+    notify_live_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn live_list(state: State<'_, AppState>) -> Result<Vec<LiveSessionView>, AppError> {
+    let connection = state.database.connection();
+    state.pty.snapshots().iter().map(|snapshot| build_view(&connection, snapshot)).collect()
+}
+
+#[tauri::command]
+pub async fn live_session(state: State<'_, AppState>, key: String) -> Result<LiveSessionView, AppError> {
+    let snapshot: SessionSnapshot = state.pty.snapshot(&key)?;
+    build_view(&state.database.connection(), &snapshot)
+}
+
+#[tauri::command]
+pub fn pty_attach(state: State<'_, AppState>, key: String, output: Channel<Response>) -> Result<(), AppError> {
+    state.pty.attach(&key, Box::new(ChannelSink(output)))
+}
+
+#[tauri::command]
+pub fn pty_detach(state: State<'_, AppState>, key: String) {
+    state.pty.detach(&key);
+}
+
+#[tauri::command]
+pub fn pty_write(state: State<'_, AppState>, key: String, data: String) -> Result<(), AppError> {
+    state.pty.write(&key, data.as_bytes())
+}
+
+#[tauri::command]
+pub fn pty_resize(state: State<'_, AppState>, key: String, cols: u16, rows: u16) -> Result<(), AppError> {
+    state.pty.resize(&key, cols, rows)
+}
+
+#[tauri::command]
+pub async fn recent_dirs(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+    let items = queries::list_sessions(&state.database.connection())?;
+    let mut directories: Vec<String> = Vec::new();
+    for cwd in items.into_iter().filter_map(|item| item.cwd) {
+        if !directories.contains(&cwd) && PathBuf::from(&cwd).is_dir() {
+            directories.push(cwd);
+        }
+    }
+    directories.truncate(12);
+    Ok(directories)
+}
+
+/// Called by the UI after the user confirmed quitting with sessions still open.
+#[tauri::command]
+pub fn app_quit(state: State<'_, AppState>, app: AppHandle) {
+    state.quit_confirmed.store(true, std::sync::atomic::Ordering::SeqCst);
+    state.pty.shutdown_all(QUIT_GRACE);
+    app.exit(0);
+}

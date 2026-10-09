@@ -7,9 +7,10 @@
 
   interface Props {
     onClose: () => void;
+    onResume: (sessionId: string) => void;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, onResume }: Props = $props();
 
   interface ListSection {
     key: string;
@@ -145,7 +146,13 @@
             <button type="button" class="secondary" disabled title="Em breve">
               <Icon name="code" size={14} />Abrir no VS Code
             </button>
-            <button type="button" class="primary" disabled title="Em breve">
+            <button
+              type="button"
+              class="primary"
+              disabled={!libraryStore.summary.cwdExists}
+              title={libraryStore.summary.cwdExists ? 'Abre claude --resume no terminal embutido' : 'A pasta original não existe mais'}
+              onclick={() => onResume(sessionId)}
+            >
               <Icon name="terminal" size={14} />Retomar no terminal
             </button>
           </footer>

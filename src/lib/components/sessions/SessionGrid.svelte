@@ -5,9 +5,12 @@
   interface Props {
     sessions: LiveSessionView[];
     onFocus: (key: string) => void;
+    onEnd: (session: LiveSessionView) => void;
+    onResume: (session: LiveSessionView) => void;
+    onRemove: (session: LiveSessionView) => void;
   }
 
-  let { sessions, onFocus }: Props = $props();
+  let { sessions, onFocus, onEnd, onResume, onRemove }: Props = $props();
 </script>
 
 {#if sessions.length === 0}
@@ -18,7 +21,7 @@
 {:else}
   <div class="grid">
     {#each sessions as session (session.key)}
-      <SessionCard {session} {onFocus} />
+      <SessionCard {session} {onFocus} {onEnd} {onResume} {onRemove} />
     {/each}
   </div>
 {/if}

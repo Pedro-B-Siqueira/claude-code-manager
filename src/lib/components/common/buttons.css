@@ -1,0 +1,48 @@
+.button-primary,
+.button-secondary,
+.button-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-button);
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    filter 150ms var(--ease),
+    background-color 150ms var(--ease);
+}
+
+.button-primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.button-danger {
+  border: 0;
+  background: var(--diff-removed);
+  color: var(--bg);
+}
+
+.button-primary:hover:not(:disabled),
+.button-danger:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.button-secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.button-primary:disabled,
+.button-secondary:disabled,
+.button-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

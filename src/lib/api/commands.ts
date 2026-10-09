@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import type { AppSettings, IndexProgress, SearchHit, SessionListItem, SessionSummary } from './types';
+import { invoke, type Channel } from '@tauri-apps/api/core';
+import type { AppSettings, IndexProgress, LiveSessionView, SearchHit, SessionListItem, SessionSummary } from './types';
 
 export function fetchSettings(): Promise<AppSettings> {
   return invoke<AppSettings>('settings_get');
@@ -47,4 +47,46 @@ export function fetchCategories(): Promise<string[]> {
 
 export function fetchIndexProgress(): Promise<IndexProgress> {
   return invoke<IndexProgress>('library_status');
+}
+
+export function newSession(cwd: string): Promise<LiveSessionView> {
+  return invoke<LiveSessionView>('session_new', { cwd });
+}
+
+export function resumeSession(sessionId: string): Promise<LiveSessionView> {
+  return invoke<LiveSessionView>('session_resume', { sessionId });
+}
+
+export function closeSession(key: string): Promise<void> {
+  return invoke<void>('session_close', { key });
+}
+
+export function fetchLiveSessions(): Promise<LiveSessionView[]> {
+  return invoke<LiveSessionView[]>('live_list');
+}
+
+export function fetchRecentDirs(): Promise<string[]> {
+  return invoke<string[]>('recent_dirs');
+}
+
+export type TerminalChunk = ArrayBuffer | number[];
+
+export function attachTerminal(key: string, output: Channel<TerminalChunk>): Promise<void> {
+  return invoke<void>('pty_attach', { key, output });
+}
+
+export function detachTerminal(key: string): Promise<void> {
+  return invoke<void>('pty_detach', { key });
+}
+
+export function writeTerminal(key: string, data: string): Promise<void> {
+  return invoke<void>('pty_write', { key, data });
+}
+
+export function resizeTerminal(key: string, cols: number, rows: number): Promise<void> {
+  return invoke<void>('pty_resize', { key, cols, rows });
+}
+
+export function quitApp(): Promise<void> {
+  return invoke<void>('app_quit');
 }

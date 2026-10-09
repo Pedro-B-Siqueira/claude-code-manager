@@ -50,6 +50,8 @@ export interface LiveSessionView {
   origin: SessionOrigin;
   hibernated: boolean;
   pinned: boolean;
+  exited: boolean;
+  startedAt: number;
 }
 
 export interface TokenUsage {

@@ -15,6 +15,14 @@ pub enum AppError {
     Database(#[from] rusqlite::Error),
     #[error("dados inválidos: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("a pasta não existe: {0}")]
+    MissingDirectory(PathBuf),
+    #[error("sessão não encontrada: {0}")]
+    UnknownSession(String),
+    #[error("falha no terminal: {0}")]
+    Terminal(String),
+    #[error("o comando `claude` não foi encontrado; ajuste o caminho nas configurações")]
+    ClaudeNotFound,
 }
 
 impl AppError {
@@ -25,6 +33,10 @@ impl AppError {
             Self::Io(_) => "io",
             Self::Database(_) => "database",
             Self::Serialization(_) => "serialization",
+            Self::MissingDirectory(_) => "missingDirectory",
+            Self::UnknownSession(_) => "unknownSession",
+            Self::Terminal(_) => "terminal",
+            Self::ClaudeNotFound => "claudeNotFound",
         }
     }
 }

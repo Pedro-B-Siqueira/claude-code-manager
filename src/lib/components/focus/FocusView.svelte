@@ -1,44 +1,66 @@
 <script lang="ts">
-  import type { LiveSessionView } from '../../api/types';
-  import StatusBadge from '../sessions/StatusBadge.svelte';
-  import FileChangeList from '../sessions/FileChangeList.svelte';
+  import type { LiveSessionView, Theme } from '../../api/types';
+  import { formatCost, formatTokens } from '../../format';
+  import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
+  import FileChangeList from '../sessions/FileChangeList.svelte';
+  import StatusBadge from '../sessions/StatusBadge.svelte';
+  import XtermView from '../terminal/XtermView.svelte';
 
   interface Props {
     sessions: LiveSessionView[];
     activeKey: string | null;
+    theme: Theme;
+    scrollback: number;
     onSelect: (key: string) => void;
+    onResume: (session: LiveSessionView) => void;
+    onNewSession: () => void;
   }
 
-  let { sessions, activeKey, onSelect }: Props = $props();
+  let { sessions, activeKey, theme, scrollback, onSelect, onResume, onNewSession }: Props = $props();
 
   const active = $derived(sessions.find((session) => session.key === activeKey) ?? sessions[0]);
 </script>
 
-<div class="focus">
-  <div class="tabs" role="tablist" aria-label="Sessões">
-    {#each sessions as session (session.key)}
-      <button
-        type="button"
-        role="tab"
-        class="tab"
-        aria-selected={session.key === active?.key}
-        class:active={session.key === active?.key}
-        onclick={() => onSelect(session.key)}
-      >
-        <span class="tab-dot" data-status={session.status} aria-hidden="true"></span>
-        <span class="tab-label">{session.title}</span>
-      </button>
-    {/each}
+{#if !active}
+  <div class="empty">
+    <Icon name="terminal" size={22} />
+    <p>Nenhuma sessão aberta.</p>
+    <button type="button" class="button-primary" onclick={onNewSession}><Icon name="plus" size={14} />Nova sessão</button>
   </div>
+{:else}
+  <div class="focus">
+    <div class="tabs" role="tablist" aria-label="Sessões">
+      {#each sessions as session (session.key)}
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          aria-selected={session.key === active.key}
+          class:active={session.key === active.key}
+          title={session.title}
+          onclick={() => onSelect(session.key)}
+        >
+          <span class="tab-dot" data-status={session.exited ? 'idle' : session.status} aria-hidden="true"></span>
+          <span class="tab-label">{session.title}</span>
+        </button>
+      {/each}
+    </div>
 
-  {#if active}
     <div class="body">
-      <section class="terminal mono" aria-label="Terminal">
-        {#each active.previewLines as line, index (index)}
-          <div>{line || ' '}</div>
-        {/each}
-        <p class="placeholder">Terminal real chega na etapa 3.</p>
+      <section class="terminal" aria-label="Terminal">
+        {#if active.exited}
+          <div class="ended">
+            <p>O terminal desta sessão foi encerrado. A conversa continua salva.</p>
+            <button type="button" class="button-primary" onclick={() => onResume(active)}>
+              <Icon name="history" size={14} />Retomar sessão
+            </button>
+          </div>
+        {:else}
+          {#key active.key}
+            <XtermView sessionKey={active.key} {theme} {scrollback} />
+          {/key}
+        {/if}
       </section>
 
       <aside class="panel">
@@ -51,16 +73,16 @@
           <dd class="mono">{active.branch ?? '—'}</dd>
           <dt>Pasta</dt>
           <dd class="mono">{active.cwd}</dd>
+          <dt>Tokens</dt>
+          <dd class="mono">{formatTokens(active.totalTokens)} · {formatCost(active.costUsd)}</dd>
         </dl>
         <ContextMeter percent={active.contextPercent} />
         <h3>Arquivos</h3>
         <FileChangeList files={active.files} visibleCount={8} />
-        <h3>Atividade</h3>
-        <p class="hint">Feed de atividade chega na etapa 5.</p>
       </aside>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <style>
   .focus {
@@ -69,6 +91,20 @@
     gap: 12px;
     min-height: 0;
     height: 100%;
+  }
+
+  .empty {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 10px;
+    height: 100%;
+    min-height: 280px;
+    color: var(--muted);
+  }
+
+  .empty p {
+    margin: 0;
   }
 
   .tabs {
@@ -91,6 +127,7 @@
     color: var(--muted);
     font-size: 12.5px;
     cursor: pointer;
+    flex-shrink: 0;
   }
 
   .tab.active {
@@ -134,19 +171,26 @@
   }
 
   .terminal {
-    padding: 14px 16px;
+    min-height: 320px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-card);
     background: var(--terminal-bg);
-    color: var(--terminal-text);
-    font-size: 12.5px;
-    line-height: 1.55;
-    overflow: auto;
-    border: 1px solid var(--border);
+    overflow: hidden;
   }
 
-  .placeholder {
-    margin-top: 18px;
+  .ended {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 12px;
+    height: 100%;
+    padding: 24px;
     color: var(--muted);
+    text-align: center;
+  }
+
+  .ended p {
+    margin: 0;
   }
 
   .panel {
@@ -185,12 +229,6 @@
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere;
-  }
-
-  .hint {
-    margin: 0;
-    font-size: 12px;
-    color: var(--muted);
   }
 
   @media (max-width: 860px) {

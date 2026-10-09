@@ -105,7 +105,8 @@ claude-code-manager/
 | `library/` | Varredura inicial em segundo plano e indexação incremental para o banco e o FTS, com commits em blocos de linhas (o cursor é salvo na mesma transação, então uma queda nunca conta linha duas vezes) e reindexação quando o arquivo é truncado ou trocado |
 | `watcher.rs` | `notify` (FSEvents) em `projects/` e `sessions/`, com debounce e sem polling |
 | `live/` | Registro de sessões vivas, fallback por processos e RSS por PID |
-| `pty/` | `portable-pty`, spawn pelo shell de login (`claude …; exec $SHELL -l -i`), ring buffer de scrollback, prévia via `vt100` e hibernação |
+| `pty/` | `portable-pty`, ring buffer de scrollback para o replay, prévia via `vt100`, encerramento por grupo de processos (SIGHUP e, depois de alguns segundos, SIGKILL) e hibernação |
+| `sessions/` | Monta o comando (`<shell> -l -i -c '<claude> …; exec <shell> -l -i'`), remove variáveis herdadas de outros terminais (`TERM_SESSION_ID`, `CLAUDECODE`…) e monta o card de sessão viva |
 | `hooks/` | Servidor HTTP local em `127.0.0.1` com porta aleatória e o arquivo de settings gerado a cada execução. O token de cada sessão vai por variável de ambiente, nunca para o disco |
 | `status.rs` | Máquina de estados das sessões |
 | `git.rs` | Branch, diffstat e worktrees (listar, criar, remover se estiver limpo) |
@@ -140,8 +141,8 @@ claude-code-manager/
 **Comandos (`invoke`).**
 
 - **Biblioteca:** `library_list`, `library_search`, `library_summary`, `library_rename`, `library_pin`, `library_set_tags`, `library_set_category`, `library_tags`, `library_categories`, `library_status`.
-- **Sessões vivas:** `live_list`, `session_new({cwd, worktree?})`, `session_resume(id)`, `session_close(key, force)`, `session_wake(key)`.
-- **Terminal:** `pty_attach(key, channel)`, `pty_detach`, `pty_write`, `pty_resize`.
+- **Sessões vivas:** `live_list`, `live_session(key)`, `session_new({cwd})`, `session_resume(id)` (reaproveita a sessão se já estiver aberta), `session_close(key)` (encerra o grupo de processos ou remove da grade se já terminou), `recent_dirs`, `app_quit`.
+- **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `session_files`, `session_activity`, `edit_detail(editId)`. O diff é carregado sob demanda, relido do transcript pelo offset da linha.
 - **Git:** `git_status`, `worktree_list`, `worktree_create`, `worktree_remove`, `open_vscode`, `open_finder`, `open_pr`.
 - **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info`.
@@ -155,6 +156,8 @@ claude-code-manager/
 | `session:delta` | Tokens, custo, contexto ou arquivos mudaram |
 | `session:activity` | Nova atividade na sessão |
 | `session:exited` | O processo da sessão saiu |
+| `session:preview` | Nova prévia em texto da tela do terminal (no máximo a cada 400 ms) |
+| `app:close-requested` | Fechar a janela ou ⌘Q com sessões abertas; a interface pede confirmação |
 | `library:changed` | A biblioteca de sessões mudou |
 | `library:progress` | Progresso da varredura inicial |
 | `needs-you:count` | Mudou o número de sessões que precisam de você |

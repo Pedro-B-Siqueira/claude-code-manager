@@ -7,16 +7,17 @@
     pinned: SessionListItem[];
     projects: ProjectGroup[];
     claudeGaugeDetected: boolean;
+    onNewSession: () => void;
     onResume: () => void;
     onOpenPinned: (sessionId: string) => void;
   }
 
-  let { pinned, projects, claudeGaugeDetected, onResume, onOpenPinned }: Props = $props();
+  let { pinned, projects, claudeGaugeDetected, onNewSession, onResume, onOpenPinned }: Props = $props();
 </script>
 
 <aside class="sidebar">
   <div class="primary-actions">
-    <button type="button" class="new-session">
+    <button type="button" class="new-session" onclick={onNewSession}>
       <Icon name="plus" />Nova sessão
     </button>
     <button type="button" class="resume-session" onclick={onResume}>
@@ -45,6 +46,9 @@
 
     <section>
       <h2>Projetos</h2>
+      {#if projects.length === 0}
+        <p class="hint">Projetos com sessões abertas aparecem aqui.</p>
+      {/if}
       <ul>
         {#each projects as project (project.repo)}
           <li class="row project">

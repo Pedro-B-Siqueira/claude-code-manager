@@ -1,6 +1,6 @@
 import type { LiveSessionView } from '../api/types';
 
-/** Placeholder data for the stage-1 layout; replaced by real transcript/PTY data in stages 2–5. */
+/** Generic sample sessions for component tests and UI previews. */
 export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
   {
     key: 'mock-1',
@@ -29,6 +29,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     origin: 'app',
     hibernated: false,
     pinned: true,
+    exited: false,
+    startedAt: 0,
   },
   {
     key: 'mock-2',
@@ -49,6 +51,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     origin: 'app',
     hibernated: false,
     pinned: false,
+    exited: false,
+    startedAt: 0,
   },
   {
     key: 'mock-3',
@@ -72,6 +76,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     origin: 'external',
     hibernated: false,
     pinned: false,
+    exited: false,
+    startedAt: 0,
   },
   {
     key: 'mock-4',
@@ -92,6 +98,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     origin: 'app',
     hibernated: false,
     pinned: false,
+    exited: false,
+    startedAt: 0,
   },
   {
     key: 'mock-5',
@@ -112,5 +120,7 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     origin: 'app',
     hibernated: true,
     pinned: false,
+    exited: false,
+    startedAt: 0,
   },
 ];

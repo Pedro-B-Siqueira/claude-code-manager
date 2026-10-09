@@ -2,6 +2,7 @@
   import type { LiveSessionView } from '../../api/types';
   import { formatCost, formatMemory, formatTokens } from '../../format';
   import Icon from '../common/Icon.svelte';
+  import CardMenu, { type MenuAction } from './CardMenu.svelte';
   import ContextMeter from './ContextMeter.svelte';
   import FileChangeList from './FileChangeList.svelte';
   import StatusBadge from './StatusBadge.svelte';
@@ -10,9 +11,22 @@
   interface Props {
     session: LiveSessionView;
     onFocus: (key: string) => void;
+    onEnd?: (session: LiveSessionView) => void;
+    onResume?: (session: LiveSessionView) => void;
+    onRemove?: (session: LiveSessionView) => void;
   }
 
-  let { session, onFocus }: Props = $props();
+  let { session, onFocus, onEnd, onResume, onRemove }: Props = $props();
+
+  const menuActions = $derived.by((): MenuAction[] => {
+    if (session.exited) {
+      return [
+        ...(onResume ? [{ id: 'resume', label: 'Retomar sessão', run: () => onResume(session) }] : []),
+        ...(onRemove ? [{ id: 'remove', label: 'Remover da grade', run: () => onRemove(session) }] : []),
+      ];
+    }
+    return onEnd ? [{ id: 'end', label: 'Encerrar sessão', danger: true, run: () => onEnd(session) }] : [];
+  });
 </script>
 
 <article class="card" class:hibernated={session.hibernated} aria-label={session.title}>
@@ -21,9 +35,12 @@
     {#if session.origin === 'external'}
       <span class="origin" title="Sessão aberta fora do app">externa</span>
     {/if}
-    <button type="button" class="icon-button menu" aria-label="Mais ações">
-      <Icon name="more" />
-    </button>
+    {#if session.exited}
+      <span class="origin" title="O processo terminou; a conversa continua retomável">encerrada</span>
+    {/if}
+    <span class="menu">
+      {#if menuActions.length > 0}<CardMenu actions={menuActions} />{/if}
+    </span>
   </header>
 
   <h3 class="title">{session.title}</h3>

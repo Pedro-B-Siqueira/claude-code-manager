@@ -2,7 +2,7 @@
 
 Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos. Não é uma IDE: serve para acompanhar várias sessões ao mesmo tempo, ver o que cada uma alterou e retomar sessões antigas.
 
-> **Status:** etapa 2 de 10 (biblioteca de sessões a partir dos transcripts). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Status:** etapa 3 de 10 (terminais embutidos: nova sessão, retomar e encerrar). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Garantias
 
@@ -11,6 +11,7 @@ Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos.
 - Hooks só entram nas sessões abertas pelo app, via `claude --settings <arquivo>`. A configuração global não muda.
 - Os dados do app ficam só em `~/Library/Application Support/ClaudeCodeManager/` (banco SQLite e logs).
 - Testes automatizados nunca rodam o `claude` real. Eles usam o binário falso `fake-claude` (`CCM_CLAUDE_BIN`).
+- Em modo de desenvolvimento, `CCM_E2E=pty-smoke CCM_E2E_CWD=<pasta> CCM_CLAUDE_BIN=<fake-claude> npm run dev` abre uma sessão e digita nela sozinho, para conferir a cadeia interface → PTY → terminal. Builds de release ignoram essas variáveis.
 
 ## Requisitos
 
