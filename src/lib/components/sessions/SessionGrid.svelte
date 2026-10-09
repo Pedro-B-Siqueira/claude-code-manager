@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shortcutLabel } from '../../app/shortcuts';
   import { dndzone, type DndEvent } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import type { LiveSessionView } from '../../api/types';
@@ -55,7 +56,7 @@
 {#if sessions.length === 0}
   <div class="empty">
     <p class="empty-title">Nenhuma sessão neste filtro</p>
-    <p class="empty-hint">Use “Nova sessão” (⌘N) ou “Retomar sessão” na barra lateral.</p>
+    <p class="empty-hint">Use “Nova sessão” ({shortcutLabel('new-session')}) ou “Retomar sessão” na barra lateral.</p>
   </div>
 {:else}
   <div

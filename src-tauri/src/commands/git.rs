@@ -8,6 +8,7 @@ use super::sessions::launch;
 use crate::error::AppError;
 use crate::git::{self, DiffStat, Git};
 use crate::library::queries;
+use crate::platform::{self, OpenTarget};
 use crate::pty::{LaunchMode, LaunchSpec};
 use crate::sessions::launch::expand_home;
 use crate::sessions::view::LiveSessionView;
@@ -178,8 +179,11 @@ pub async fn open_vscode(state: State<'_, AppState>, path: String, expected_bran
         _ => None,
     };
     let opened = match state.shell().find_binary("code") {
-        Some(code) => Command::new(code).arg(&directory).spawn().map(|_| ()),
-        None => Command::new("/usr/bin/open").args(["-a", "Visual Studio Code"]).arg(&directory).spawn().map(|_| ()),
+        Some(code) => Command::new(code).arg(&directory).spawn().map(drop).map_err(AppError::from),
+        None => match platform::vscode_fallback(&directory, platform::CURRENT) {
+            Some(fallback) => platform::spawn(&fallback),
+            None => Err(AppError::Invalid("o comando `code` não foi encontrado; no VS Code, rode \"Shell Command: Install 'code' command in PATH\"".to_owned())),
+        },
     };
     opened?;
     Ok(OpenOutcome { warning })
@@ -188,16 +192,14 @@ pub async fn open_vscode(state: State<'_, AppState>, path: String, expected_bran
 #[tauri::command]
 pub async fn open_finder(path: String) -> Result<(), AppError> {
     let directory = existing_directory(&path)?;
-    Command::new("/usr/bin/open").arg(directory).spawn()?;
-    Ok(())
+    platform::open(OpenTarget::Folder(&directory))
 }
 
 fn open_url(url: &str) -> Result<(), AppError> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err(AppError::Invalid("endereço de PR inválido".to_owned()));
     }
-    Command::new("/usr/bin/open").arg(url).spawn()?;
-    Ok(())
+    platform::open(OpenTarget::Url(url))
 }
 
 /// Opens the session's pull request without writing anything: the PR recorded in the transcript,

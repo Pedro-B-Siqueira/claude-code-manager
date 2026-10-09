@@ -1,11 +1,11 @@
 use std::path::Path;
-use std::process::Command;
 
 use tauri::State;
 use tauri::ipc::{InvokeBody, Request, Response};
 
 use crate::attachments::{Attachment, AttachmentUsage};
 use crate::error::AppError;
+use crate::platform::{self, OpenTarget};
 use crate::state::AppState;
 
 /// The image arrives as the raw request body: no base64 round trip for a 10 MB screenshot.
@@ -30,8 +30,7 @@ pub async fn attachment_preview(state: State<'_, AppState>, id: String) -> Resul
 #[tauri::command]
 pub async fn attachment_open(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let path = state.attachments.existing(&id)?;
-    Command::new("/usr/bin/open").args(["-a", "Preview"]).arg(path).spawn()?;
-    Ok(())
+    platform::open(OpenTarget::Image(&path))
 }
 
 #[tauri::command]

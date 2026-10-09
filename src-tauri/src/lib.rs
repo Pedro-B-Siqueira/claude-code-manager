@@ -13,6 +13,7 @@ pub mod links;
 pub mod live;
 pub mod notifications;
 pub mod paths;
+pub mod platform;
 pub mod pricing;
 pub mod pty;
 pub mod sessions;
@@ -241,12 +242,16 @@ pub fn run() {
         .plugin(log_plugin(&paths))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(move |app| setup(app, paths))
         .on_window_event(|window, event| {
-            // Closing the window keeps the app (and its sessions) running in the menu bar.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                if tray::hides_on_close(platform::CURRENT) {
+                    let _ = window.hide();
+                } else {
+                    request_quit(window.app_handle());
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -310,6 +315,8 @@ pub fn run() {
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, .. } if needs_quit_confirmation(app) => api.prevent_exit(),
             RunEvent::Exit => app.state::<AppState>().pty.shutdown_all(Duration::from_secs(2)),
+            // Clicking the Dock icon; Linux has no equivalent event.
+            #[cfg(target_os = "macos")]
             RunEvent::Reopen { .. } => tray::show_main_window(app),
             _ => {}
         });

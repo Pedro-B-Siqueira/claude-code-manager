@@ -5,7 +5,6 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::error::AppError;
 
-const APP_SUPPORT_FOLDER: &str = "ClaudeCodeManager";
 const DATABASE_FILE: &str = "ccm.sqlite";
 
 /// Directories the app reads from and writes to. `claude_home` and `~/.claude.json`
@@ -34,12 +33,10 @@ impl AppPaths {
         let claude_home = non_empty_var("CLAUDE_CONFIG_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".claude"));
-        let app_support = non_empty_var("CCM_APP_SUPPORT_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                home.join("Library/Application Support")
-                    .join(APP_SUPPORT_FOLDER)
-            });
+        let app_support = non_empty_var("CCM_APP_SUPPORT_DIR").map(PathBuf::from).unwrap_or_else(|| {
+            let xdg_data_home = non_empty_var("XDG_DATA_HOME").map(PathBuf::from);
+            crate::platform::default_app_support(&home, crate::platform::CURRENT, xdg_data_home.as_deref())
+        });
         Ok(Self::new(home, claude_home, app_support))
     }
 

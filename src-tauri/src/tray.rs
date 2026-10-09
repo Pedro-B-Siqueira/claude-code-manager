@@ -23,6 +23,27 @@ const OPEN_ITEM: &str = "open";
 const QUIT_ITEM: &str = "quit";
 const TITLE_MAX_CHARS: usize = 48;
 
+/// The app accent (`--accent` in the dark theme).
+const ACCENT: [u8; 3] = [0xd9, 0x77, 0x57];
+
+/// macOS tints the template image for the menu bar; Linux panels show icons as they are, so they get
+/// the accent color, which stays visible on light and dark panels.
+pub fn tray_icon_rgba(os: crate::platform::Os) -> Vec<u8> {
+    let mut pixels = template_icon_rgba();
+    if os == crate::platform::Os::Linux {
+        for pixel in pixels.chunks_mut(4).filter(|pixel| pixel[3] == 255) {
+            pixel[..3].copy_from_slice(&ACCENT);
+        }
+    }
+    pixels
+}
+
+/// Closing the window keeps the app running only on macOS, where the Dock reopens it. A Linux tray icon
+/// can be installed and still never shown (GNOME without the AppIndicator extension), so Linux quits.
+pub fn hides_on_close(os: crate::platform::Os) -> bool {
+    os == crate::platform::Os::MacOs
+}
+
 /// Four rounded tiles in black on transparent: a template image, so macOS tints it for light and dark bars.
 pub fn template_icon_rgba() -> Vec<u8> {
     let tile = 15;
@@ -129,10 +150,11 @@ impl TrayUpdater {
 }
 
 pub fn install(app: &AppHandle, request_quit: fn(&AppHandle)) -> tauri::Result<TrayUpdater> {
-    let icon = Image::new_owned(template_icon_rgba(), ICON_SIZE, ICON_SIZE);
+    let os = crate::platform::CURRENT;
+    let icon = Image::new_owned(tray_icon_rgba(os), ICON_SIZE, ICON_SIZE);
     let tray = TrayIconBuilder::with_id("main")
         .icon(icon)
-        .icon_as_template(true)
+        .icon_as_template(os == crate::platform::Os::MacOs)
         .tooltip("Claude Code Manager")
         .menu(&build_menu(app, &[])?)
         .show_menu_on_left_click(true)
@@ -224,6 +246,22 @@ mod tests {
     fn title_shows_only_a_positive_count() {
         assert_eq!(title_for(0), None);
         assert_eq!(title_for(3).as_deref(), Some("3"));
+    }
+
+    #[test]
+    fn linux_gets_a_colored_icon_that_shows_on_dark_panels() {
+        let pixels = tray_icon_rgba(crate::platform::Os::Linux);
+        let opaque: Vec<&[u8]> = pixels.chunks(4).filter(|pixel| pixel[3] == 255).collect();
+        assert!(!opaque.is_empty());
+        assert!(opaque.iter().all(|pixel| pixel[..3] == ACCENT), "every tile pixel uses the app accent");
+        assert_eq!(tray_icon_rgba(crate::platform::Os::MacOs), template_icon_rgba(), "macOS keeps the template image");
+    }
+
+    #[test]
+    fn closing_the_window_hides_it_only_on_macos() {
+        use crate::platform::Os;
+        assert!(hides_on_close(Os::MacOs), "the Dock icon reopens the window on macOS");
+        assert!(!hides_on_close(Os::Linux), "a Linux tray icon can be installed and still invisible (GNOME without AppIndicator)");
     }
 
     #[test]

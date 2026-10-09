@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { shortcutLabel } from '../../app/shortcuts';
   import type { Theme } from '../../api/types';
   import Icon from '../common/Icon.svelte';
 
@@ -22,10 +23,10 @@
     <span class="name">Claude Code Manager</span>
   </div>
 
-  <button type="button" class="search" aria-label="Buscar (⌘K)" onclick={onOpenPalette}>
+  <button type="button" class="search" aria-label={`Buscar (${shortcutLabel('palette')})`} onclick={onOpenPalette}>
     <Icon name="search" size={14} />
     <span class="search-text">Buscar sessões, arquivos, branches…</span>
-    <kbd class="mono">⌘K</kbd>
+    <kbd class="mono">{shortcutLabel('palette')}</kbd>
   </button>
 
   <div class="right" data-tauri-drag-region>
@@ -44,7 +45,7 @@
     <button type="button" class="theme" aria-label={themeLabel} title={themeLabel} onclick={onToggleTheme}>
       <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
     </button>
-    <button type="button" class="theme" aria-label="Configurações (⌘,)" title="Configurações (⌘,)" onclick={onOpenSettings}>
+    <button type="button" class="theme" aria-label={`Configurações (${shortcutLabel('settings')})`} title={`Configurações (${shortcutLabel('settings')})`} onclick={onOpenSettings}>
       <Icon name="settings" />
     </button>
   </div>

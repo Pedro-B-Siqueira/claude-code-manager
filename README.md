@@ -1,10 +1,22 @@
 # Claude Code Manager
 
-Um app de macOS para quem roda várias sessões do [Claude Code](https://code.claude.com) ao mesmo tempo. Ele mostra o que cada sessão está fazendo, o que ela alterou e o que está esperando de você, e deixa retomar conversas antigas sem procurar o id no terminal.
+Um app de macOS e Linux para quem roda várias sessões do [Claude Code](https://code.claude.com) ao mesmo tempo. Ele mostra o que cada sessão está fazendo, o que ela alterou e o que está esperando de você, e deixa retomar conversas antigas sem procurar o id no terminal.
 
 Não é uma IDE. Os terminais são reais (cada sessão é o `claude` de sempre, rodando no seu shell), e o app fica em volta deles organizando.
 
 ![Sessões ativas em grade, tema escuro](docs/images/grade-escuro.png)
+
+## Download
+
+Baixe a versão mais recente em **[Releases](https://github.com/Pedro-B-Siqueira/claude-code-manager/releases/latest)**.
+
+**macOS 14 ou superior** (Apple Silicon e Intel): abra o `.dmg` e arraste o app para Aplicativos. O app não tem assinatura da Apple, então na primeira vez o macOS bloqueia. Libere em **Ajustes → Privacidade e Segurança → Abrir mesmo assim**, ou rode:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Claude Code Manager.app"
+```
+
+**Linux x86_64 e arm64** (experimental, ainda sem teste numa máquina real): prefira o `.deb` (Ubuntu, Debian e derivados), que já instala as dependências: `sudo apt install ./Claude*.deb`. Ou use o AppImage: `chmod +x ./Claude*.AppImage` e execute; no Ubuntu 24.04 ou superior ele precisa do FUSE 2 (`sudo apt install libfuse2t64`). Para colar imagens no Claude Code, instale `xclip` (X11) ou `wl-clipboard` (Wayland). O ícone na bandeja depende do painel; no GNOME, só aparece com a extensão AppIndicator. Achou algo estranho? Abra uma issue.
 
 ## Por que existe
 
@@ -24,7 +36,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ![Modo foco com terminal e resumo](docs/images/foco.png)
 
-**Imagens e links no terminal.** Cole um print com ⌘V ou arraste imagens para o terminal: elas aparecem numa bandeja com miniaturas, saem com um clique no X e vão junto no próximo Enter. ⌘+clique abre links: páginas no navegador, imagens no Preview e arquivos no VS Code.
+**Imagens e links no terminal.** Cole um print com ⌘V ou arraste imagens para o terminal: elas aparecem numa bandeja com miniaturas, saem com um clique no X e vão junto no próximo Enter. Os links aparecem em azul, e ⌘+clique (Ctrl+clique no Linux) abre: páginas no navegador, imagens no visualizador e arquivos no VS Code.
 
 **Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e os tokens escritos. Dá para renomear, fixar, pôr tags e categoria, e retomar no terminal com um clique.
 
@@ -40,7 +52,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 **Status de verdade.** Nas sessões abertas pelo app, o status vem dos hooks do Claude Code: trabalhando, pedindo permissão (com o comando pedido), esperando você, concluída ou ociosa. Sessões abertas em outros terminais aparecem também, marcadas como externas.
 
-**Barra de menus.** Um ícone mostra quantas sessões precisam de você, com uma lista para pular direto para qualquer uma. Fechar a janela só a esconde; as sessões continuam rodando.
+**Barra de menus.** Um ícone mostra quantas sessões precisam de você, com uma lista para pular direto para qualquer uma. Fechar a janela só a esconde; as sessões continuam rodando. (No Linux, fechar a janela encerra o app, porque o ícone da bandeja não aparece em todos os painéis.)
 
 **Tema claro e escuro.** O terminal fica escuro nos dois, porque o Claude Code desenha os diffs e o texto esmaecido pensando em fundo escuro.
 
@@ -58,11 +70,15 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 - **Sua configuração do Claude Code não muda.** Os hooks do app entram só nas sessões que ele abre, pela flag `claude --settings`, e se somam aos seus. O arquivo de settings não tem segredo: o token de cada sessão vai por variável de ambiente.
 - **Zero tokens.** O app nunca chama modelo nenhum nem a API da Anthropic, e não lê o token de login.
 - **Git só com confirmação.** As únicas operações que escrevem são criar e remover worktree. A remoção recusa worktrees com alterações pendentes. Nada de `checkout`, `reset`, `stash` ou `--force`.
-- **Dados locais.** Nomes, tags, ordem dos cards, índice de busca, configurações e as imagens anexadas (apagadas depois de 3 dias) ficam em `~/Library/Application Support/ClaudeCodeManager/`.
+- **Dados locais.** Nomes, tags, ordem dos cards, índice de busca, configurações e as imagens anexadas (apagadas depois de 3 dias) ficam em `~/Library/Application Support/ClaudeCodeManager/` (no Linux, `~/.local/share/ClaudeCodeManager/`).
 
-## Instalação
+## Compilar a partir do código
 
-Requisitos: macOS 14 ou superior em Apple Silicon, Node 20.19+, [Rust](https://rustup.rs) estável e as Command Line Tools do Xcode.
+Requisitos: macOS 14 ou superior (com as Command Line Tools do Xcode) ou Linux com WebKitGTK 4.1, Node 20.19+ e [Rust](https://rustup.rs) estável. No Linux, instale antes as dependências de sistema:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential libssl-dev libxdo-dev
+```
 
 ```bash
 git clone https://github.com/Pedro-B-Siqueira/claude-code-manager.git
@@ -71,19 +87,23 @@ npm install
 npm run generate
 ```
 
-O `.app` e o `.dmg` ficam em `src-tauri/target/release/bundle/`. O build não é assinado; na primeira vez, abra com botão direito → **Abrir**.
+Os instaladores ficam em `src-tauri/target/release/bundle/` (`.app` e `.dmg` no macOS, AppImage e `.deb` no Linux).
 
 Se o Rust foi instalado com `rustup --no-modify-path`, não tem problema: os scripts já incluem `~/.cargo/bin`.
 
 ## Uso
 
-| Atalho | Ação |
-|---|---|
-| ⌘K | Busca rápida |
-| ⌘N | Nova sessão |
-| ⌘1…9 | Ir para a sessão N |
-| ⌘, | Configurações |
-| ⌘Q | Sair (pede confirmação se alguma sessão estiver trabalhando) |
+| Ação | macOS | Linux |
+|---|---|---|
+| Busca rápida | ⌘K | Ctrl+Shift+K |
+| Nova sessão | ⌘N | Ctrl+Shift+N |
+| Ir para a sessão N | ⌘1…9 | Ctrl+Shift+1…9 |
+| Configurações | ⌘, | Ctrl+Shift+, |
+| Copiar e colar no terminal | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V |
+| Abrir link no terminal | ⌘+clique | Ctrl+clique |
+| Sair | ⌘Q | Fechar a janela, ou "Sair" no ícone da bandeja |
+
+Sair pede confirmação se alguma sessão estiver trabalhando. No Linux, Ctrl+C e Ctrl+V vão direto para o Claude Code (o Ctrl+V é como ele cola imagens lá).
 
 Sem login no Claude Code, o histórico e a busca funcionam normalmente. Ao abrir uma sessão, o próprio Claude Code pede o login no terminal embutido, como faria em qualquer terminal.
 
@@ -91,7 +111,7 @@ Nas configurações dá para trocar o tema, a pasta e os prefixos de branch dos 
 
 ## Como funciona
 
-- **Histórico.** Os transcripts em `~/.claude/projects` são lidos de forma incremental (só o que foi acrescentado) e indexados num SQLite com busca FTS5. FSEvents avisa quando algo muda, sem polling.
+- **Histórico.** Os transcripts em `~/.claude/projects` são lidos de forma incremental (só o que foi acrescentado) e indexados num SQLite com busca FTS5. O sistema avisa quando algo muda (FSEvents no macOS, inotify no Linux), sem polling.
 - **Sessões vivas.** As do app rodam num PTY pelo seu shell de login, então herdam o mesmo PATH e ambiente do seu terminal. As externas vêm do registro de sessões que o Claude Code mantém em `~/.claude/sessions`.
 - **Status.** Um servidor HTTP local, só em `127.0.0.1`, recebe os hooks das sessões do app. Cada sessão tem um token próprio, e o servidor só observa: nunca responde uma decisão no lugar do Claude Code.
 - **Tokens.** O card mostra o que o Claude escreveu, somando cada resposta uma vez só (o transcript repete a mesma resposta em várias linhas). O total processado não aparece: cerca de 99% dele é o contexto relido do cache a cada chamada, um número enorme que não diz quanto trabalho foi feito.
@@ -117,9 +137,11 @@ Por isso a hibernação vem ligada. Depois de 30 minutos ociosa (configurável),
 | Comando | O que faz |
 |---|---|
 | `npm run dev` | App em modo de desenvolvimento |
-| `npm run generate` | Build de produção (`.app` e `.dmg`) |
+| `npm run generate` | Build de produção do sistema atual |
 | `npm test` | Testes Rust, checagem de tipos e testes do frontend |
-| `scripts/measure-memory.sh` | Mede a memória do app aberto |
+| `scripts/measure-memory.sh` | Mede a memória do app aberto (macOS) |
+
+A cada push, o GitHub Actions roda `npm test` no macOS, no Ubuntu x64 e no Ubuntu arm64. Uma tag `vX.Y.Z` gera a Release, em rascunho, com o `.dmg` universal, o AppImage e o `.deb`.
 
 Os testes nunca rodam o `claude` de verdade. Eles usam o `fake-claude` (`src-tauri/crates/fake-claude`), um binário que imita a saída no terminal e chama os hooks declarados no `--settings`, apontado pela variável `CCM_CLAUDE_BIN`. Para ver a cadeia inteira funcionando em dev:
 

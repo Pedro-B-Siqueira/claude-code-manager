@@ -10,6 +10,7 @@ Este documento descreve como o Claude Code Manager é organizado: estrutura de p
 - **Dados próprios isolados.** Tudo que o app guarda fica em `~/Library/Application Support/ClaudeCodeManager/`. A janela usa armazenamento não persistente do WebView, para que nada seja gravado em `~/Library/WebKit`.
 - **Git só com ação explícita.** Nenhum `checkout`, `reset` ou `stash` automático. Criar ou remover worktree exige confirmação.
 - **O app se adapta ao usuário, não o contrário.** Projetos, pastas de worktree, branch principal e convenções são inferidos do que já existe na máquina (transcripts, `git worktree list`, configuração do repositório). Tudo pode ser ajustado nas configurações, que ficam só na máquina do usuário.
+- **macOS e Linux.** O que muda entre os dois fica em `platform.rs` (abridor de arquivos e links, pasta de dados, lista de processos) e em `src/lib/platform.ts` (atalhos, rótulos, teclas do terminal). O Linux é experimental: validado pelo CI, ainda sem teste de interface numa máquina real.
 - **Testes nunca rodam o `claude` real.** O binário falso `fake-claude` (selecionado por `CCM_CLAUDE_BIN`) simula a saída do terminal, as linhas de transcript e as chamadas de hook.
 
 ## Decisões de projeto
@@ -21,6 +22,9 @@ Este documento descreve como o Claude Code Manager é organizado: estrutura de p
 | Cota de uso | Fora do escopo. O app não lê token OAuth nem acessa o Keychain. O custo equivalente por sessão é calculado localmente a partir do `usage` dos transcripts, mas não aparece na interface. |
 | Tokens na interface | Só os escritos pelo Claude (`output`). Cerca de 99% do total processado é o contexto relido do cache a cada chamada, o que gera números enormes que não dizem quanto trabalho foi feito. |
 | Terminal na grade | Os cards mostram uma prévia em texto gerada no backend: as últimas linhas acima da caixa de prompt e da linha de status do Claude Code, ou seja, o que ele está fazendo. O xterm.js só é montado na sessão em foco. |
+| Linux | Barra de título nativa; atalhos Ctrl+Shift (pela tecla física); Ctrl+C e Ctrl+V vão para o Claude Code, Ctrl+Shift+C/V copiam e colam texto; Ctrl+clique abre links. Pasta de dados em `$XDG_DATA_HOME/ClaudeCodeManager` (padrão `~/.local/share`). Fechar a janela encerra o app: o ícone da bandeja pode estar instalado e mesmo assim invisível (GNOME sem a extensão AppIndicator). |
+| Releases | Tag `v*` → GitHub Actions (`tauri-action`, actions fixadas por SHA) → Release em rascunho com `.dmg` universal (assinatura ad-hoc), AppImage e `.deb` para x64 e arm64. Um modo de ensaio (`workflow_dispatch`) só gera os artefatos. |
+| Links no terminal | URLs `http(s)` visíveis ficam azuis (decorations do xterm, reconciliadas nas linhas visíveis depois de cada escrita, para a cor nunca ficar em texto redesenhado). |
 | Terminal no tema claro | Sempre escuro. O Claude Code desenha diffs e texto esmaecido para fundo escuro, e o tema dele é configuração do usuário, que o app não muda. Blocos de código do app (diff no hover, comando do worktree) seguem o tema. |
 | Fechar a janela | Esconde a janela; o app segue na barra de menus com as sessões rodando. ⌘Q ou "Sair" encerram, com confirmação se alguma sessão estiver trabalhando. Clicar no ícone do Dock reabre a janela. |
 
@@ -122,9 +126,10 @@ claude-code-manager/
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
 | `attachments.rs` | Imagens coladas ou arrastadas para o terminal, guardadas em `attachments/` na pasta do app. O tipo é conferido pelos primeiros bytes (PNG, JPEG, GIF, WebP), com limite de 20 MB. Ids no formato `<uuid>.<ext>`, então um id nunca aponta para fora da pasta. Arquivos com mais de 3 dias são apagados ao abrir o app e a cada 6 h |
 | `links.rs` | Destino de cada link clicado no terminal: `http`/`https` no navegador, imagem no Preview, outro arquivo no VS Code (ou só mostrado no Finder), pasta mostrada no Finder. Um `file://` só vai direto para o `open` quando é imagem, para que um link para app ou script nunca o execute |
+| `platform.rs` | O que muda entre macOS e Linux, montado por funções puras testáveis nos dois: `open`/`xdg-open` (no Linux, "mostrar" abre a pasta), VS Code sem `code`, `ps -axo`/`ps -eo`, pasta de dados. O diretório de um processo vem do `lsof` no macOS e de `/proc/<pid>/cwd` no Linux |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
-| `tray.rs` | Ícone template na barra de menus (desenhado em código), título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |
+| `tray.rs` | Ícone desenhado em código: template preto no macOS, na cor de destaque no Linux (painéis escuros); decide se fechar a janela esconde ou encerra; título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |
 | `commands/` | Handlers finos por domínio |
 
 ### Status das sessões
@@ -214,6 +219,7 @@ SQLite em `~/Library/Application Support/ClaudeCodeManager/ccm.sqlite`. O cache 
 ## Verificação
 
 - **`npm test`:** roda `cargo test --workspace`, `svelte-check` e `vitest`.
+- **CI:** a cada push, `npm test` no macOS 14, no Ubuntu 22.04 x64 e no Ubuntu 22.04 arm64.
 - **`golden_rules.rs`:** cria um HOME temporário com `~/.claude` populado e em modo somente leitura, exercita o app e confirma que nenhum arquivo ali mudou.
 - **Testes de fluxo:** usam o `fake-claude` para cobrir nova sessão, retomada, status via hooks, hibernação, encerramento (inclusive o SIGKILL de um processo que ignora o SIGHUP) e o envio com imagens. Como o CLI real, o `fake-claude` lê tecla a tecla, ativa a colagem entre colchetes e troca cada caminho de imagem colado por `[Image #n]`.
 - **Git:** os testes rodam em repositórios temporários e conferem que consultas não alteram `.git/index` e que nenhuma operação muda a branch do checkout principal.

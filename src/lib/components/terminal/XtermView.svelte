@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Channel } from '@tauri-apps/api/core';
+  import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { FitAddon } from '@xterm/addon-fit';
   import { WebLinksAddon } from '@xterm/addon-web-links';
   import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -10,22 +11,25 @@
   import { attachTerminal, detachTerminal, openLink, resizeTerminal, writeTerminal, type TerminalChunk } from '../../api/commands';
   import { reportError, reportWarning, type FailureCause } from '../../api/logger';
   import { shortcutFor } from '../../app/shortcuts';
+  import { PLATFORM } from '../../platform';
   import { toastStore } from '../../stores/toasts.svelte';
   import { pasteAction, type PastedImage } from '../../terminal/attachments';
-  import { shouldOpenLink } from '../../terminal/links';
+  import { terminalKeyAction } from '../../terminal/keys';
+  import { LinkColorizer } from '../../terminal/link-colorizer';
+  import { linkHint, shouldOpenLink } from '../../terminal/links';
   import { TERMINAL_THEME } from '../../terminal/palette';
 
   interface Props {
     sessionKey: string;
     scrollback: number;
-    /** Receives a supported image pasted with ⌘V; without it, pastes behave as before. */
+    /** Receives a supported image pasted with ⌘V (macOS); without it, pastes behave as before. */
     onPasteImage?: (image: PastedImage) => void;
     /** Returning true keeps the key from reaching the terminal. */
     beforeEnter?: (event: KeyboardEvent) => boolean;
   }
 
   let { sessionKey, scrollback, onPasteImage, beforeEnter }: Props = $props();
-  let linkHint = $state<{ x: number; y: number } | null>(null);
+  let linkHintPosition = $state<{ x: number; y: number } | null>(null);
 
   const FONT_FAMILY = '"Geist Mono", ui-monospace, Menlo, monospace';
   const FONT_SIZE = 12.5;
@@ -53,14 +57,26 @@
     }
   }
 
-  /** ⌘C copies the selection; app shortcuts (⌘K, ⌘N, ⌘1…9) are never typed into the terminal. */
+  /** App shortcuts (⌘K, ⌘N, ⌘1…9 or Ctrl+Shift on Linux) are never typed into the terminal. */
   function handleAppKeys(target: Terminal): void {
     target.attachCustomKeyEventHandler((event) => {
       if (shortcutFor(event)) return false;
       if (beforeEnter?.(event)) return false;
-      const isCopy = event.type === 'keydown' && event.metaKey && event.key === 'c' && target.hasSelection();
-      if (isCopy) void navigator.clipboard.writeText(target.getSelection());
-      return !isCopy;
+      const action = terminalKeyAction(event, PLATFORM, target.hasSelection());
+      if (action === 'copy') {
+        if (target.hasSelection()) void writeText(target.getSelection()).catch((cause: FailureCause) => reportWarning('falha ao copiar', cause));
+        return false;
+      }
+      if (action === 'paste-text') {
+        event.preventDefault();
+        void readText()
+          .then((text) => target.paste(text))
+          .catch((cause: FailureCause) => reportWarning('falha ao colar', cause));
+        return false;
+      }
+      // Keeps the WebView from pasting, so xterm sends Ctrl+V itself.
+      if (action === 'send-to-terminal') event.preventDefault();
+      return true;
     });
   }
 
@@ -87,11 +103,11 @@
   }
 
   function showLinkHint(event: MouseEvent): void {
-    linkHint = { x: event.clientX, y: event.clientY };
+    linkHintPosition = { x: event.clientX, y: event.clientY };
   }
 
   function hideLinkHint(): void {
-    linkHint = null;
+    linkHintPosition = null;
   }
 
   onMount(() => {
@@ -113,6 +129,7 @@
     terminal = target;
     target.loadAddon(fit);
     target.loadAddon(new WebLinksAddon(activateLink, { hover: showLinkHint, leave: hideLinkHint }));
+    const linkColors = new LinkColorizer(target);
     target.loadAddon(new Unicode11Addon());
     target.unicode.activeVersion = '11';
     handleAppKeys(target);
@@ -149,6 +166,7 @@
       cancelAnimationFrame(frame);
       observer.disconnect();
       container.removeEventListener('paste', handlePaste, { capture: true });
+      linkColors.dispose();
       input.dispose();
       void detachTerminal(sessionKey).catch((cause: FailureCause) => reportWarning('falha ao desconectar do terminal', cause));
       webgl?.dispose();
@@ -160,8 +178,8 @@
 </script>
 
 <div class="terminal-host" bind:this={container}></div>
-{#if linkHint}
-  <div class="link-hint" style:left="{linkHint.x + 12}px" style:top="{linkHint.y + 16}px">⌘+clique para abrir</div>
+{#if linkHintPosition}
+  <div class="link-hint" style:left="{linkHintPosition.x + 12}px" style:top="{linkHintPosition.y + 16}px">{linkHint()}</div>
 {/if}
 
 <style>

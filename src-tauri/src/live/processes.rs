@@ -20,7 +20,8 @@ pub struct ProcessTable {
 
 impl ProcessTable {
     pub fn capture() -> Self {
-        let output = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,rss=,comm="]).output();
+        let command = crate::platform::ps_command(crate::platform::CURRENT);
+        let output = Command::new(&command.program).args(&command.args).output();
         match output {
             Ok(output) if output.status.success() => Self::parse(&String::from_utf8_lossy(&output.stdout)),
             _ => Self::default(),
@@ -79,7 +80,14 @@ impl ProcessTable {
     }
 }
 
-/// Working directory of a process via `lsof` (read-only).
+/// Working directory of a process (read-only): `/proc` on Linux, `lsof` on macOS.
+#[cfg(target_os = "linux")]
+pub fn process_cwd(pid: u32) -> Option<String> {
+    std::fs::read_link(format!("/proc/{pid}/cwd")).ok().map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Working directory of a process (read-only): `/proc` on Linux, `lsof` on macOS.
+#[cfg(not(target_os = "linux"))]
 pub fn process_cwd(pid: u32) -> Option<String> {
     let output = Command::new("/usr/sbin/lsof").args(["-a", "-p", &pid.to_string(), "-d", "cwd", "-Fn"]).output().ok()?;
     String::from_utf8_lossy(&output.stdout).lines().find_map(|line| line.strip_prefix('n')).map(str::to_owned)
@@ -90,6 +98,13 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = "  1     0   100 /sbin/launchd\n 100     1  2048 /bin/zsh\n 200   100 512000 claude\n 300   200 10240 node\n 400     1  4096 /usr/local/bin/claude\nbroken line\n";
+
+    #[test]
+    fn reads_the_working_directory_of_a_process() {
+        let expected = std::env::current_dir().unwrap().canonicalize().unwrap();
+        let found = process_cwd(std::process::id()).map(|cwd| std::path::PathBuf::from(cwd).canonicalize().unwrap());
+        assert_eq!(found, Some(expected));
+    }
 
     #[test]
     fn sums_memory_across_the_process_tree() {
