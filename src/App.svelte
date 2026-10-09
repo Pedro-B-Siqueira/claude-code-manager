@@ -5,14 +5,22 @@
   import Sidebar from './lib/components/layout/Sidebar.svelte';
   import TopBar from './lib/components/layout/TopBar.svelte';
   import ViewToggle from './lib/components/layout/ViewToggle.svelte';
+  import ResumeModal from './lib/components/library/ResumeModal.svelte';
   import SessionGrid from './lib/components/sessions/SessionGrid.svelte';
+  import { libraryStore } from './lib/stores/library.svelte';
   import { liveSessionsStore } from './lib/stores/live.svelte';
   import { settingsStore } from './lib/stores/settings.svelte';
   import { uiStore } from './lib/stores/ui.svelte';
 
   onMount(() => {
     void settingsStore.load();
+    void libraryStore.start();
   });
+
+  function openResume(sessionId: string | null = null): void {
+    uiStore.resumeOpen = true;
+    if (sessionId) void libraryStore.select(sessionId);
+  }
 
   const visibleSessions = $derived(liveSessionsStore.filtered(uiStore.filter));
 </script>
@@ -27,10 +35,11 @@
 
   <div class="workspace">
     <Sidebar
-      pinned={liveSessionsStore.pinned}
+      pinned={libraryStore.pinned}
       projects={liveSessionsStore.projects}
       claudeGaugeDetected={true}
-      onFocus={(key) => uiStore.focusSession(key)}
+      onResume={() => openResume()}
+      onOpenPinned={(sessionId) => openResume(sessionId)}
     />
 
     <main class="main">
@@ -66,6 +75,10 @@
     </main>
   </div>
 </div>
+
+{#if uiStore.resumeOpen}
+  <ResumeModal onClose={() => (uiStore.resumeOpen = false)} />
+{/if}
 
 <style>
   .shell {

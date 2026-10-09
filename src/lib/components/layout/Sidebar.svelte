@@ -1,16 +1,17 @@
 <script lang="ts">
-  import type { LiveSessionView } from '../../api/types';
+  import type { SessionListItem } from '../../api/types';
   import type { ProjectGroup } from '../../stores/live.svelte';
   import Icon from '../common/Icon.svelte';
 
   interface Props {
-    pinned: LiveSessionView[];
+    pinned: SessionListItem[];
     projects: ProjectGroup[];
     claudeGaugeDetected: boolean;
-    onFocus: (key: string) => void;
+    onResume: () => void;
+    onOpenPinned: (sessionId: string) => void;
   }
 
-  let { pinned, projects, claudeGaugeDetected, onFocus }: Props = $props();
+  let { pinned, projects, claudeGaugeDetected, onResume, onOpenPinned }: Props = $props();
 </script>
 
 <aside class="sidebar">
@@ -18,7 +19,7 @@
     <button type="button" class="new-session">
       <Icon name="plus" />Nova sessão
     </button>
-    <button type="button" class="resume-session">
+    <button type="button" class="resume-session" onclick={onResume}>
       <Icon name="history" />Retomar sessão
     </button>
   </div>
@@ -30,9 +31,9 @@
         <p class="hint">Fixe sessões para acesso rápido.</p>
       {:else}
         <ul>
-          {#each pinned as session (session.key)}
+          {#each pinned as session (session.id)}
             <li>
-              <button type="button" class="row" onclick={() => onFocus(session.key)}>
+              <button type="button" class="row" title={session.title} onclick={() => onOpenPinned(session.id)}>
                 <Icon name="pin" size={13} />
                 <span class="row-label">{session.title}</span>
               </button>

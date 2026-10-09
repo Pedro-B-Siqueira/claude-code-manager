@@ -1,5 +1,9 @@
 //! Shared helpers: a throwaway HOME whose `.claude` tree is populated and then made read-only.
 
+#![allow(dead_code)]
+
+pub mod fixtures;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -21,13 +25,9 @@ impl SandboxHome {
         let home = root.path().join("home");
         let claude_home = home.join(".claude");
         let app_support = home.join("Library/Application Support/ClaudeCodeManager");
-        fs::create_dir_all(claude_home.join("projects/-tmp-sample")).expect("claude dirs");
+        fs::create_dir_all(claude_home.join("projects")).expect("claude dirs");
         fs::write(claude_home.join("settings.json"), r#"{"hooks":{}}"#).expect("settings");
-        fs::write(
-            claude_home.join("projects/-tmp-sample/session.jsonl"),
-            "{}\n",
-        )
-        .expect("jsonl");
+        fixtures::install_demo_session(&claude_home.join("projects"));
         fs::write(home.join(".claude.json"), "{}").expect("user config");
         set_read_only_recursively(&claude_home);
         Self {

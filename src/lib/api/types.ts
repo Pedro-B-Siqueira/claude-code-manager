@@ -51,3 +51,69 @@ export interface LiveSessionView {
   hibernated: boolean;
   pinned: boolean;
 }
+
+export interface TokenUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+}
+
+export interface SessionListItem {
+  id: string;
+  title: string;
+  customName: string | null;
+  firstPrompt: string | null;
+  project: string;
+  cwd: string | null;
+  branch: string | null;
+  startedAt: number | null;
+  updatedAt: number | null;
+  pinned: boolean;
+  pinOrder: number | null;
+  category: string | null;
+  tags: string[];
+  costUsd: number;
+  filesCount: number;
+}
+
+export interface FileTouched {
+  path: string;
+  added: number;
+  removed: number;
+  edits: number;
+  isNewFile: boolean;
+}
+
+export interface SessionSummary {
+  item: SessionListItem;
+  aiTitle: string | null;
+  lastPrompt: string | null;
+  lastAssistant: string | null;
+  cwdExists: boolean;
+  repoRoot: string | null;
+  model: string | null;
+  prUrl: string | null;
+  durationMs: number | null;
+  usage: TokenUsage;
+  unknownPricing: boolean;
+  contextTokens: number | null;
+  contextWindow: number;
+  contextPercent: number | null;
+  files: FileTouched[];
+}
+
+export type MatchSource = 'title' | 'project' | 'branch' | 'file' | 'tag' | 'text';
+
+export interface SearchHit {
+  sessionId: string;
+  matchedIn: MatchSource;
+  snippet: string | null;
+}
+
+export interface IndexProgress {
+  running: boolean;
+  filesDone: number;
+  filesTotal: number;
+}

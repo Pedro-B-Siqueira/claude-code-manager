@@ -31,7 +31,10 @@ Validado com o Claude Code 2.1.295. Nada disso é API oficial, então cada forma
 - **Campos comuns:** `cwd`, `gitBranch`, `timestamp`, `sessionId`, `uuid`, `parentUuid`, `isSidechain` e `version`.
 - **Mensagem do assistente:** `message.{id, model, content[], usage, stop_reason}`. O `usage` traz `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` e `cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}`.
 - **Edições:** `tool_use` Edit (`file_path`, `old_string`, `new_string`, `replace_all`) e Write (`file_path`, `content`). O `toolUseResult` da linha `user` seguinte traz `structuredPatch[{oldStart, oldLines, newStart, newLines, lines}]`, que dá a faixa de linhas. MultiEdit é aceito pelo parser, mas não aparece nas versões recentes.
-- **Subagentes:** `<sessionId>/subagents/agent-*.jsonl`. As edições feitas por eles entram nos arquivos da sessão principal, com um selo.
+- **Subagentes:** `<sessionId>/subagents/agent-*.jsonl`, e também `<sessionId>/subagents/workflows/<execução>/agent-*.jsonl` para workflows (o `journal.jsonl` dessas pastas tem outro formato e é ignorado). As edições e o uso dos subagentes entram na sessão principal; as edições ganham um selo.
+- **Respostas divididas:** uma mesma resposta da API aparece em várias linhas consecutivas com o mesmo `message.id` e o mesmo `usage`. O uso é contado uma vez por `message.id`.
+- **Prompt humano:** nas versões recentes, `origin.kind == "human"`. Linhas `user` com `isMeta`, `isCompactSummary`, avisos de tarefa (`<task-notification>`) e saídas de comando local não são prompts. Comandos de barra aparecem como `<command-name>`/`<command-args>`.
+- **Outras linhas úteis:** `pr-link` (`prUrl`) e `cost-state` (`totalCostUSD` e `modelUsage` por modelo, usado para validar o cálculo de custo).
 
 **Sessões vivas.** O Claude Code mantém `~/.claude/sessions/<pid>.json` com `{pid, sessionId, cwd, status: busy|idle, statusUpdatedAt, name, kind, version}`. Essa é a fonte principal para sessões abertas fora do app. O fallback é `ps` + `lsof`, e o PID sempre é validado com `kill(pid, 0)`.
 
@@ -97,9 +100,9 @@ claude-code-manager/
 | `db/` | SQLite (`rusqlite`, SQLite embutido com FTS5) e migrations por `user_version` |
 | `shell_env.rs` | Lê o PATH do shell de login uma vez e localiza `claude`, `code`, `gh` e `git` |
 | `transcript/` | Tipos tolerantes a campos novos, parser linha a linha, leitura incremental por offset, extração de edições (faixa + "Por quê"), resumo local e soma de `usage` deduplicada por `message.id` |
-| `pricing.rs` | Preço por modelo para o custo equivalente (cache 5m = 1,25×, 1h = 2×, leitura = 0,1× da entrada) |
-| `context.rs` | Tamanho da janela de contexto por modelo e porcentagem usada |
-| `library/` | Varredura inicial em segundo plano e indexação incremental para o banco e o FTS |
+| `pricing.rs` | Preço por modelo para o custo equivalente: tabela oficial por família e versão, escrita de cache 1,25× (5 min) ou 2× (1 h) da entrada, leitura de cache com preço próprio por modelo e faixa por tamanho de prompt no Haiku 5.5. Validado contra o `totalCostUSD` que o Claude Code grava |
+| `context.rs` | Janela de contexto por modelo (1M na geração atual, 200K no Haiku 4.5 e anteriores) e porcentagem usada |
+| `library/` | Varredura inicial em segundo plano e indexação incremental para o banco e o FTS, com commits em blocos de linhas (o cursor é salvo na mesma transação, então uma queda nunca conta linha duas vezes) e reindexação quando o arquivo é truncado ou trocado |
 | `watcher.rs` | `notify` (FSEvents) em `projects/` e `sessions/`, com debounce e sem polling |
 | `live/` | Registro de sessões vivas, fallback por processos e RSS por PID |
 | `pty/` | `portable-pty`, spawn pelo shell de login (`claude …; exec $SHELL -l -i`), ring buffer de scrollback, prévia via `vt100` e hibernação |
@@ -136,7 +139,7 @@ claude-code-manager/
 
 **Comandos (`invoke`).**
 
-- **Biblioteca:** `library_list`, `library_search`, `session_summary`, `session_rename`, `session_pin`, `session_set_tags`, `session_set_category`, `tags_list`.
+- **Biblioteca:** `library_list`, `library_search`, `library_summary`, `library_rename`, `library_pin`, `library_set_tags`, `library_set_category`, `library_tags`, `library_categories`, `library_status`.
 - **Sessões vivas:** `live_list`, `session_new({cwd, worktree?})`, `session_resume(id)`, `session_close(key, force)`, `session_wake(key)`.
 - **Terminal:** `pty_attach(key, channel)`, `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `session_files`, `session_activity`, `edit_detail(editId)`. O diff é carregado sob demanda, relido do transcript pelo offset da linha.
@@ -153,6 +156,7 @@ claude-code-manager/
 | `session:activity` | Nova atividade na sessão |
 | `session:exited` | O processo da sessão saiu |
 | `library:changed` | A biblioteca de sessões mudou |
+| `library:progress` | Progresso da varredura inicial |
 | `needs-you:count` | Mudou o número de sessões que precisam de você |
 
 A saída do terminal vai por `tauri::ipc::Channel` binário, e só enquanto o xterm está montado.
@@ -170,7 +174,8 @@ SQLite em `~/Library/Application Support/ClaudeCodeManager/ccm.sqlite`. O cache 
 | `tags` · `session_tags` | Tags e associações |
 | `file_edits` | Edições com faixa de linhas, +/− e posição da linha no transcript (o diff completo não fica no banco) |
 | `activity` | Feed de atividade por sessão |
-| `session_fts` | Índice FTS5 com títulos, prompts, texto do assistente, arquivos e branch (sem `tool_result`, para manter o índice pequeno) |
+| `session_fts` | Índice FTS5 (sem acentos) com os prompts e o texto do assistente, uma linha por mensagem. Título, projeto, branch, arquivos e tags são buscados direto nas tabelas. `tool_result` não é indexado, para o índice ficar pequeno |
+| `projects` | Projeto de cada `cwd`, resolvido pelo `.git` comum (um worktree aponta para o repositório principal) |
 | `app_sessions` | Sessões abertas pelo app, inclusive as hibernadas |
 | `grid_order` | Ordem dos cards na grade |
 

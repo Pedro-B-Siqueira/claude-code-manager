@@ -2,6 +2,8 @@
 
 mod support;
 
+use ccm_lib::db::Database;
+use ccm_lib::library::{indexer::Indexer, queries};
 use ccm_lib::settings::{self, AppSettings, Theme};
 use support::SandboxHome;
 
@@ -36,4 +38,24 @@ fn app_support_inside_claude_home_is_refused() {
         sandbox.claude_home.join("ccm"),
     );
     assert!(ccm_lib::build_state(hostile).is_err());
+}
+
+#[test]
+fn indexing_transcripts_never_touches_claude_home() {
+    let sandbox = SandboxHome::with_read_only_claude_home();
+    let before = sandbox.claude_fingerprint();
+
+    let state = ccm_lib::build_state(sandbox.paths()).expect("state");
+    let indexer = Indexer::new(
+        Database::open(&state.paths.database_file()).expect("indexer connection"),
+        sandbox.claude_home.join("projects"),
+    );
+    let discovered = indexer.discover();
+    assert_eq!(discovered.len(), 2, "main transcript and subagent are discovered");
+    for transcript in &discovered {
+        indexer.index_file(transcript).expect("indexing works on a read-only ~/.claude");
+    }
+
+    assert_eq!(queries::list_sessions(&state.database.connection()).expect("list").len(), 1);
+    assert_eq!(sandbox.claude_fingerprint(), before, "~/.claude must stay byte-for-byte identical");
 }

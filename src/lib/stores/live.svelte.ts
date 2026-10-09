@@ -22,7 +22,6 @@ class LiveSessionsStore {
   counts = $derived(countByFilter(this.sessions));
   needsYouCount = $derived(this.sessions.filter((session) => needsYou(session.status)).length);
   projects = $derived(groupByRepo(this.sessions));
-  pinned = $derived(this.sessions.filter((session) => session.pinned));
 
   filtered(filter: SessionFilter): LiveSessionView[] {
     return this.sessions.filter((session) => matchesFilter(session, filter));

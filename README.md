@@ -2,7 +2,7 @@
 
 Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos. Não é uma IDE: serve para acompanhar várias sessões ao mesmo tempo, ver o que cada uma alterou e retomar sessões antigas.
 
-> **Status:** etapa 1 de 10 (esqueleto com dados falsos). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Status:** etapa 2 de 10 (biblioteca de sessões a partir dos transcripts). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Garantias
 
@@ -33,6 +33,7 @@ npm install
 | `npm run generate` | Build de produção: gera `.app` e `.dmg` em `src-tauri/target/release/bundle/`. |
 | `npm test` | Testes Rust (`cargo test --workspace`), checagem de tipos (`svelte-check`) e testes do frontend (`vitest`). |
 | `npm run check` | Só a checagem de tipos do frontend. |
+| `cargo run --release --example index_benchmark -- <projects> <db>` | Mede a indexação de um diretório de transcripts num banco descartável (em `src-tauri/`). |
 
 O build é local e não é assinado nem notarizado. Na primeira abertura do `.app`, use botão direito → **Abrir**.
 
@@ -58,5 +59,5 @@ O formato dos transcripts e o registro de sessões vivas não são API oficial e
 
 ## Créditos
 
-- **ClaudeGauge**, de Pedro Henrique Gazola ([github.com/PedroHenriqueGazola/ClaudeGauge](https://github.com/PedroHenriqueGazola/ClaudeGauge), licença MIT): referência para a tabela de preços de modelos (custo equivalente por sessão) e para a detecção de sessões vivas. A lógica foi portada para Rust, sem cópia do código Swift.
+- **ClaudeGauge**, de Pedro Henrique Gazola ([github.com/PedroHenriqueGazola/ClaudeGauge](https://github.com/PedroHenriqueGazola/ClaudeGauge), licença MIT): referência para o cálculo de custo equivalente (estrutura da tabela de preços e divisão da escrita de cache por TTL) e para a detecção de sessões vivas. A lógica foi portada para Rust, sem cópia do código Swift. Duas diferenças: o uso é contado uma vez por resposta (`message.id`), já que o transcript repete o `usage` em várias linhas, e a tabela de preços foi atualizada com os valores oficiais dos modelos atuais.
 - **Geist** e **Geist Mono**, da Vercel (SIL Open Font License 1.1): fontes embutidas no app. A licença está em `src/lib/assets/fonts/OFL.txt`.

@@ -6,6 +6,7 @@ class UiStore {
   viewMode = $state<ViewMode>('grid');
   filter = $state<SessionFilter>('all');
   focusedSessionKey = $state<string | null>(null);
+  resumeOpen = $state(false);
 
   showFilter(filter: SessionFilter): void {
     this.filter = filter;

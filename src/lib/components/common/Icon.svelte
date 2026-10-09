@@ -18,7 +18,12 @@
     | 'gauge'
     | 'shield'
     | 'memory'
-    | 'sleep';
+    | 'sleep'
+    | 'pencil'
+    | 'close'
+    | 'warning'
+    | 'terminal'
+    | 'pullRequest';
 
   const ICON_PATHS: Record<IconName, string> = {
     plus: 'M12 5v14M5 12h14',
@@ -40,6 +45,11 @@
     shield: 'M12 3l7 3v6c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6Z',
     memory: 'M5 7h14v10H5ZM8 7V4M12 7V4M16 7V4M8 20v-3M12 20v-3M16 20v-3',
     sleep: 'M4 6h5l-5 6h5M13 12h4l-4 5h4',
+    pencil: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
+    close: 'M6 6l12 12M18 6L6 18',
+    warning: 'M12 4l9 16H3ZM12 10v4M12 17h.01',
+    terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
+    pullRequest: 'M6 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM6 7v14M18 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM18 17V9a3 3 0 0 0-3-3h-4M13 4l-2 2 2 2',
   };
 </script>
 
