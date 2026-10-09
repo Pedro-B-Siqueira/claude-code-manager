@@ -30,6 +30,9 @@
   --accent-ink: #141413;
   --terminal-bg: #0e0e0d;
   --terminal-text: #dad7cd;
+  --terminal-muted: #a8a59c;
+  --code-bg: #0e0e0d;
+  --code-text: #dad7cd;
   --blue: #82aeff;
   --amber: #ebbe55;
   --green: #72c68c;
@@ -48,8 +51,12 @@
   --muted: #5b5953;
   --accent: #b4502f;
   --accent-ink: #ffffff;
-  --terminal-bg: #fbfaf7;
-  --terminal-text: #2a2925;
+  /* The terminal stays dark in both themes (see TERMINAL_THEME); code blocks follow the theme. */
+  --terminal-bg: #0e0e0d;
+  --terminal-text: #dad7cd;
+  --terminal-muted: #a8a59c;
+  --code-bg: #fbfaf7;
+  --code-text: #2a2925;
   --blue: #2b5fc4;
   --amber: #8a5e00;
   --green: #1f7a45;

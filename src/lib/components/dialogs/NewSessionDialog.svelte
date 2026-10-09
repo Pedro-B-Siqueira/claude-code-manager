@@ -232,8 +232,8 @@
     margin: 0 0 10px;
     padding: 10px 12px;
     border-radius: 9px;
-    background: var(--terminal-bg);
-    color: var(--terminal-text);
+    background: var(--code-bg);
+    color: var(--code-text);
     font-size: 12px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

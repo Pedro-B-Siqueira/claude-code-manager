@@ -50,4 +50,10 @@ describe('SessionCard', () => {
     render(SessionCard, { session: { ...mockSession(0), filesTotal: 9 }, onFocus: vi.fn() });
     expect(screen.getByText('+6 arquivos')).toBeInTheDocument();
   });
+
+  it('shows the tokens Claude wrote and no dollar value', () => {
+    render(SessionCard, { session: { ...mockSession(0), outputTokens: 1_284_000 }, onFocus: vi.fn() });
+    expect(screen.getByText('1,3 mi tok escritos')).toBeInTheDocument();
+    expect(screen.queryByText(/US\$/)).not.toBeInTheDocument();
+  });
 });

@@ -18,8 +18,10 @@ Este documento descreve como o Claude Code Manager é organizado: estrutura de p
 |---|---|
 | Worktrees | Raiz configurável. Sem configuração, o app infere a raiz a partir dos worktrees que já existem nos repositórios conhecidos; sem nenhum, usa `~/worktrees`. Estrutura plana `<raiz>/<repo>-<slug>`. Os prefixos de branch são configuráveis (padrão `feat-` e `fix-`), e a branch nova sai da branch principal local do repositório (detectada como `main` ou `master`), sem `fetch` automático. |
 | Hibernação | Ligada por padrão, depois de 30 min de ociosidade. Sessões em Trabalhando ou Pedindo permissão nunca hibernam. O card mostra a memória (RSS) do processo `claude`. |
-| Cota de uso | Fora do escopo. O app não lê token OAuth nem acessa o Keychain. O custo equivalente por sessão é calculado localmente a partir do `usage` dos transcripts. |
-| Terminal na grade | Os cards mostram uma prévia em texto gerada no backend. O xterm.js só é montado na sessão em foco. |
+| Cota de uso | Fora do escopo. O app não lê token OAuth nem acessa o Keychain. O custo equivalente por sessão é calculado localmente a partir do `usage` dos transcripts, mas não aparece na interface. |
+| Tokens na interface | Só os escritos pelo Claude (`output`). Cerca de 99% do total processado é o contexto relido do cache a cada chamada, o que gera números enormes que não dizem quanto trabalho foi feito. |
+| Terminal na grade | Os cards mostram uma prévia em texto gerada no backend: as últimas linhas acima da caixa de prompt e da linha de status do Claude Code, ou seja, o que ele está fazendo. O xterm.js só é montado na sessão em foco. |
+| Terminal no tema claro | Sempre escuro. O Claude Code desenha diffs e texto esmaecido para fundo escuro, e o tema dele é configuração do usuário, que o app não muda. Blocos de código do app (diff no hover, comando do worktree) seguem o tema. |
 | Fechar a janela | Esconde a janela; o app segue na barra de menus com as sessões rodando. ⌘Q ou "Sair" encerram, com confirmação se alguma sessão estiver trabalhando. Clicar no ícone do Dock reabre a janela. |
 
 ## Formatos do Claude Code
@@ -106,7 +108,7 @@ claude-code-manager/
 | `db/` | SQLite (`rusqlite`, SQLite embutido com FTS5) e migrations por `user_version`. Cada passo roda numa transação junto com a troca de versão: se falhar, o banco fica como estava |
 | `shell_env.rs` | Lê o PATH do shell de login uma vez e localiza `claude`, `code`, `gh` e `git` |
 | `transcript/` | Tipos tolerantes a campos novos, parser linha a linha, leitura incremental por offset, extração de edições (faixa + "Por quê"), resumo local e soma de `usage` deduplicada por `message.id` |
-| `pricing.rs` | Preço por modelo para o custo equivalente: tabela oficial por família e versão, escrita de cache 1,25× (5 min) ou 2× (1 h) da entrada, leitura de cache com preço próprio por modelo e faixa por tamanho de prompt no Haiku 5.5. Validado contra o `totalCostUSD` que o Claude Code grava |
+| `pricing.rs` | Preço por modelo para o custo equivalente (calculado, não exibido): tabela oficial por família e versão, escrita de cache 1,25× (5 min) ou 2× (1 h) da entrada, leitura de cache com preço próprio por modelo e faixa por tamanho de prompt no Haiku 5.5. Validado contra o `totalCostUSD` que o Claude Code grava |
 | `context.rs` | Janela de contexto por modelo (1M na geração atual, 200K no Haiku 4.5 e anteriores) e porcentagem usada |
 | `library/` | Varredura inicial em segundo plano e indexação incremental para o banco e o FTS, com commits em blocos de linhas (o cursor é salvo na mesma transação, então uma queda nunca conta linha duas vezes) e reindexação quando o arquivo é truncado, trocado ou reescrito no lugar (o byte antes do cursor precisa ser uma quebra de linha). A pasta observada é a canônica, porque o FSEvents reporta caminhos já resolvidos (`/private/var/…`) |
 | `watcher.rs` | `notify` (FSEvents) em `projects/` e `sessions/`, com debounce e sem polling |

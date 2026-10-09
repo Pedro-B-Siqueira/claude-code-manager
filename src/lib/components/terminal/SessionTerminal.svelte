@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { openAttachment } from '../../api/commands';
   import { reportWarning, type FailureCause } from '../../api/logger';
-  import type { LiveSessionView, Theme } from '../../api/types';
+  import type { LiveSessionView } from '../../api/types';
   import { attachmentsStore } from '../../stores/attachments.svelte';
   import { toastStore } from '../../stores/toasts.svelte';
   import {
@@ -20,11 +20,10 @@
 
   interface Props {
     session: LiveSessionView;
-    theme: Theme;
     scrollback: number;
   }
 
-  let { session, theme, scrollback }: Props = $props();
+  let { session, scrollback }: Props = $props();
 
   let host: HTMLDivElement;
   let terminal = $state<ReturnType<typeof XtermView>>();
@@ -67,7 +66,7 @@
 <div class="session-terminal" bind:this={host}>
   <AttachmentTray {images} onRemove={(id) => void attachmentsStore.remove(session.key, id)} onOpen={openImage} />
   <div class="xterm-slot">
-    <XtermView bind:this={terminal} sessionKey={session.key} {theme} {scrollback} onPasteImage={pasteImage} {beforeEnter} />
+    <XtermView bind:this={terminal} sessionKey={session.key} {scrollback} onPasteImage={pasteImage} {beforeEnter} />
   </div>
 </div>
 

@@ -30,15 +30,39 @@ impl TerminalScreen {
         count_image_placeholders(&self.parser.screen().contents())
     }
 
-    /// The last non-blank lines on screen, trailing spaces trimmed.
+    /// The last non-blank lines on screen, trailing spaces trimmed. Claude Code keeps its prompt box
+    /// and status lines at the bottom, so the preview shows what is above them.
     pub fn preview_lines(&self) -> Vec<String> {
         let contents = self.parser.screen().contents();
-        let lines: Vec<&str> = contents.lines().map(str::trim_end).collect();
+        let screen_lines: Vec<&str> = contents.lines().map(str::trim_end).collect();
+        let lines = &screen_lines[..prompt_box_start(&screen_lines).unwrap_or(screen_lines.len())];
         let last_content = lines.iter().rposition(|line| !line.is_empty());
         let Some(end) = last_content else { return Vec::new() };
         let start = end.saturating_sub(PREVIEW_LINES - 1);
         lines[start..=end].iter().map(|line| (*line).to_owned()).collect()
     }
+}
+
+const MIN_RULE_WIDTH: usize = 10;
+
+/// Where Claude Code's prompt box starts: the last pair of horizontal rules with the `❯` input between.
+fn prompt_box_start(lines: &[&str]) -> Option<usize> {
+    let rules: Vec<usize> = lines.iter().enumerate().filter(|(_, line)| is_rule(line)).map(|(index, _)| index).collect();
+    rules
+        .windows(2)
+        .rev()
+        .find(|pair| lines[pair[0] + 1..pair[1]].iter().any(|line| is_prompt(line)))
+        .map(|pair| pair[0])
+}
+
+fn is_rule(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.chars().count() >= MIN_RULE_WIDTH && trimmed.chars().all(|character| character == '─')
+}
+
+fn is_prompt(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with('❯') || trimmed.starts_with('>')
 }
 
 /// Counts `[Image #<digits>]`. Claude Code wraps long prompts itself, so the placeholder can be split
@@ -95,6 +119,30 @@ mod tests {
         assert!(screen.bracketed_paste());
         screen.process(b"\x1b[?2004l");
         assert!(!screen.bracketed_paste());
+    }
+
+    /// Claude Code 2.x: activity, then its prompt box (rule, `❯`, rule) and status lines at the bottom.
+    const CLAUDE_SCREEN: &[u8] = "\u{23fa} Update(src/orders/table.tsx)\r\n  \u{23bf} Updated with 12 additions\r\n\r\n\u{273b} Working\u{2026} (esc to interrupt)\r\n\
+\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\r\n\
+\u{276f} \r\n\
+\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\r\n\
+  \u{25b8}\u{25b8} auto mode on (shift+tab to cycle)".as_bytes();
+
+    #[test]
+    fn skips_claude_codes_prompt_box_and_status_lines() {
+        let mut screen = TerminalScreen::new(12, 60);
+        screen.process(CLAUDE_SCREEN);
+        assert_eq!(
+            screen.preview_lines(),
+            vec!["\u{23fa} Update(src/orders/table.tsx)", "  \u{23bf} Updated with 12 additions", "", "\u{273b} Working\u{2026} (esc to interrupt)"]
+        );
+    }
+
+    #[test]
+    fn rules_without_a_prompt_between_them_are_ordinary_output() {
+        let mut screen = TerminalScreen::new(8, 40);
+        screen.process("intro\r\n\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\r\nsection text\r\n\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\r\nend".as_bytes());
+        assert_eq!(screen.preview_lines().last().map(String::as_str), Some("end"));
     }
 
     #[test]

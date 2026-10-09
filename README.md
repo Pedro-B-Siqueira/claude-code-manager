@@ -14,7 +14,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ## O que ele faz
 
-**Sessões em grade.** Cada card mostra status, repositório, branch, as últimas linhas do terminal, os arquivos alterados (+/−), o quanto da janela de contexto já foi usado, tokens, custo equivalente e memória. Os filtros separam as que precisam de você das que estão trabalhando ou já terminaram, e os cards podem ser reordenados arrastando.
+**Sessões em grade.** Cada card mostra status, repositório, branch, o que o Claude está fazendo no terminal, os arquivos alterados (+/−), o quanto da janela de contexto já foi usado, os tokens que o Claude escreveu e a memória. Os filtros separam as que precisam de você das que estão trabalhando ou já terminaram, e os cards podem ser reordenados arrastando.
 
 **Por que mudou isso?** Ao passar o mouse (ou focar com o teclado) num arquivo, aparece o diff daquela edição e o texto que o assistente escreveu logo antes de fazê-la. Tudo é lido do transcript local.
 
@@ -26,7 +26,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 **Imagens e links no terminal.** Cole um print com ⌘V ou arraste imagens para o terminal: elas aparecem numa bandeja com miniaturas, saem com um clique no X e vão junto no próximo Enter. ⌘+clique abre links: páginas no navegador, imagens no Preview e arquivos no VS Code.
 
-**Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e o custo. Dá para renomear, fixar, pôr tags e categoria, e retomar no terminal com um clique.
+**Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e os tokens escritos. Dá para renomear, fixar, pôr tags e categoria, e retomar no terminal com um clique.
 
 ![Histórico com busca e resumo](docs/images/retomar.png)
 
@@ -42,14 +42,14 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 **Barra de menus.** Um ícone mostra quantas sessões precisam de você, com uma lista para pular direto para qualquer uma. Fechar a janela só a esconde; as sessões continuam rodando.
 
-**Tema claro e escuro.**
+**Tema claro e escuro.** O terminal fica escuro nos dois, porque o Claude Code desenha os diffs e o texto esmaecido pensando em fundo escuro.
 
 ![Tema claro](docs/images/grade-claro.png)
 
 ## O que ele não faz
 
 - Não edita código, não tem extensões e não substitui o seu editor (o botão abre o VS Code).
-- Não mostra cota de uso nem gastos agregados. Para isso existe o [ClaudeGauge](https://github.com/PedroHenriqueGazola/ClaudeGauge), e os dois convivem bem.
+- Não mostra cota de uso nem custo. Para isso existe o [ClaudeGauge](https://github.com/PedroHenriqueGazola/ClaudeGauge), e os dois convivem bem.
 - Não sincroniza nada com nuvem.
 
 ## Garantias
@@ -94,7 +94,7 @@ Nas configurações dá para trocar o tema, a pasta e os prefixos de branch dos 
 - **Histórico.** Os transcripts em `~/.claude/projects` são lidos de forma incremental (só o que foi acrescentado) e indexados num SQLite com busca FTS5. FSEvents avisa quando algo muda, sem polling.
 - **Sessões vivas.** As do app rodam num PTY pelo seu shell de login, então herdam o mesmo PATH e ambiente do seu terminal. As externas vêm do registro de sessões que o Claude Code mantém em `~/.claude/sessions`.
 - **Status.** Um servidor HTTP local, só em `127.0.0.1`, recebe os hooks das sessões do app. Cada sessão tem um token próprio, e o servidor só observa: nunca responde uma decisão no lugar do Claude Code.
-- **Custo equivalente.** Calculado a partir do `usage` de cada resposta, contada uma vez só (o transcript repete a mesma resposta em várias linhas), com os preços oficiais de cada modelo.
+- **Tokens.** O card mostra o que o Claude escreveu, somando cada resposta uma vez só (o transcript repete a mesma resposta em várias linhas). O total processado não aparece: cerca de 99% dele é o contexto relido do cache a cada chamada, um número enorme que não diz quanto trabalho foi feito.
 
 Os detalhes estão em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -142,6 +142,6 @@ O formato dos transcripts e o registro de sessões não são API oficial do Clau
 
 ## Créditos
 
-- [**ClaudeGauge**](https://github.com/PedroHenriqueGazola/ClaudeGauge), de Pedro Henrique Gazola (MIT): referência para o cálculo de custo equivalente e a detecção de sessões vivas. A lógica foi reescrita em Rust, com duas diferenças: cada resposta é contada uma vez só e os preços são os oficiais dos modelos atuais.
+- [**ClaudeGauge**](https://github.com/PedroHenriqueGazola/ClaudeGauge), de Pedro Henrique Gazola (MIT): referência para a leitura do uso nos transcripts e a detecção de sessões vivas. A lógica foi reescrita em Rust, e cada resposta é contada uma vez só.
 - [**Geist** e **Geist Mono**](https://vercel.com/font), da Vercel (SIL Open Font License 1.1), embutidas no app.
 - Feito com [Tauri](https://tauri.app), [Svelte](https://svelte.dev), [xterm.js](https://xtermjs.org) e [svelte-dnd-action](https://github.com/isaacHagoel/svelte-dnd-action).

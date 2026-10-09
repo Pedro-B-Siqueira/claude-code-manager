@@ -2,8 +2,8 @@
   import { fetchActivity } from '../../api/commands';
   import { onLibraryChanged } from '../../api/events';
   import { reportWarning, type FailureCause } from '../../api/logger';
-  import type { ActivityItem, LiveSessionView, Theme } from '../../api/types';
-  import { formatCost, formatMemory, formatTokens } from '../../format';
+  import type { ActivityItem, LiveSessionView } from '../../api/types';
+  import { formatMemory, formatTokens } from '../../format';
   import ActivityFeed from '../sessions/ActivityFeed.svelte';
   import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
@@ -16,7 +16,6 @@
   interface Props {
     sessions: LiveSessionView[];
     activeKey: string | null;
-    theme: Theme;
     scrollback: number;
     panelWidth: number;
     onPanelResize: (width: number) => void;
@@ -26,7 +25,7 @@
     onNewSession: () => void;
   }
 
-  let { sessions, activeKey, theme, scrollback, panelWidth, onPanelResize, onSelect, onResume, onWake, onNewSession }: Props = $props();
+  let { sessions, activeKey, scrollback, panelWidth, onPanelResize, onSelect, onResume, onWake, onNewSession }: Props = $props();
 
   // Opening a hibernated session wakes it once; a failure waits for an explicit retry.
   let wakingKey = $state<string | null>(null);
@@ -125,7 +124,7 @@
           </div>
         {:else}
           {#key active.key}
-            <SessionTerminal session={active} {theme} {scrollback} />
+            <SessionTerminal session={active} {scrollback} />
           {/key}
         {/if}
       </section>
@@ -154,8 +153,8 @@
             <dd class="mono">{active.branch ?? '—'}</dd>
             <dt>Pasta</dt>
             <dd class="mono">{active.cwd}</dd>
-            <dt>Tokens</dt>
-            <dd class="mono">{formatTokens(active.totalTokens)} · {formatCost(active.costUsd)}</dd>
+            <dt>Tokens escritos</dt>
+            <dd class="mono">{formatTokens(active.outputTokens)}</dd>
             {#if active.memoryMb !== null}
               <dt>Memória</dt>
               <dd class="mono">{formatMemory(active.memoryMb)}</dd>
@@ -277,7 +276,7 @@
     gap: 12px;
     height: 100%;
     padding: 24px;
-    color: var(--muted);
+    color: var(--terminal-muted);
     text-align: center;
   }
 

@@ -3,19 +3,8 @@ const compactNumber = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 1,
 });
 
-const usdCurrency = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 export function formatTokens(tokens: number): string {
   return compactNumber.format(tokens);
-}
-
-export function formatCost(costUsd: number): string {
-  return usdCurrency.format(costUsd);
 }
 
 export function formatMemory(megabytes: number): string {

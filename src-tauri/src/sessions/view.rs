@@ -50,8 +50,8 @@ pub struct LiveSessionView {
     /// All files the session touched; `files` carries only the first few for the card.
     pub files_total: u32,
     pub context_percent: Option<f64>,
-    pub total_tokens: u64,
-    pub cost_usd: f64,
+    /// Tokens Claude wrote. Totals with input are dominated by the cached context re-read on every call.
+    pub output_tokens: u64,
     pub memory_mb: Option<f64>,
     pub origin: SessionOrigin,
     pub pid: Option<u32>,
@@ -110,8 +110,7 @@ impl ConversationFacts {
             files: card_files(summary),
             files_total: summary.map_or(0, |summary| u32::try_from(summary.files.len()).unwrap_or(u32::MAX)),
             context_percent: summary.and_then(|summary| summary.context_percent),
-            total_tokens: summary.map_or(0, |summary| summary.usage.total()),
-            cost_usd: summary.map_or(0.0, |summary| summary.item.cost_usd),
+            output_tokens: summary.map_or(0, |summary| summary.usage.output),
             memory_mb: base.memory_mb,
             origin: base.origin,
             pid: base.pid,

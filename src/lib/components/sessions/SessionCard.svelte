@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { LiveSessionView } from '../../api/types';
-  import { formatCost, formatMemory, formatTokens } from '../../format';
+  import { formatMemory, formatTokens } from '../../format';
   import { openInFinder, openInVsCode, openPr } from '../../sessions/actions';
   import { gitStatusStore } from '../../stores/git-status.svelte';
   import Icon from '../common/Icon.svelte';
@@ -97,9 +97,7 @@
 
   <footer class="foot">
     <span class="stats mono">
-      <span title="Tokens da sessão">{formatTokens(session.totalTokens)} tok</span>
-      <span aria-hidden="true">·</span>
-      <span title="Custo equivalente na API">{formatCost(session.costUsd)}</span>
+      <span title="Tokens escritos pelo Claude nesta sessão">{formatTokens(session.outputTokens)} tok escritos</span>
       {#if session.memoryMb !== null}
         <span aria-hidden="true">·</span>
         <span class="memory" title="Memória do processo claude">

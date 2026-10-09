@@ -9,16 +9,14 @@
   import { onMount } from 'svelte';
   import { attachTerminal, detachTerminal, openLink, resizeTerminal, writeTerminal, type TerminalChunk } from '../../api/commands';
   import { reportError, reportWarning, type FailureCause } from '../../api/logger';
-  import type { Theme } from '../../api/types';
   import { shortcutFor } from '../../app/shortcuts';
   import { toastStore } from '../../stores/toasts.svelte';
   import { pasteAction, type PastedImage } from '../../terminal/attachments';
   import { shouldOpenLink } from '../../terminal/links';
-  import { terminalTheme } from '../../terminal/palette';
+  import { TERMINAL_THEME } from '../../terminal/palette';
 
   interface Props {
     sessionKey: string;
-    theme: Theme;
     scrollback: number;
     /** Receives a supported image pasted with ⌘V; without it, pastes behave as before. */
     onPasteImage?: (image: PastedImage) => void;
@@ -26,7 +24,7 @@
     beforeEnter?: (event: KeyboardEvent) => boolean;
   }
 
-  let { sessionKey, theme, scrollback, onPasteImage, beforeEnter }: Props = $props();
+  let { sessionKey, scrollback, onPasteImage, beforeEnter }: Props = $props();
   let linkHint = $state<{ x: number; y: number } | null>(null);
 
   const FONT_FAMILY = '"Geist Mono", ui-monospace, Menlo, monospace';
@@ -109,7 +107,7 @@
       cursorBlink: true,
       allowProposedApi: true,
       macOptionIsMeta: false,
-      theme: terminalTheme(theme),
+      theme: TERMINAL_THEME,
       linkHandler: { activate: activateLink, hover: showLinkHint, leave: hideLinkHint, allowNonHttpProtocols: true },
     });
     terminal = target;
@@ -159,9 +157,6 @@
     };
   });
 
-  $effect(() => {
-    if (terminal) terminal.options.theme = terminalTheme(theme);
-  });
 </script>
 
 <div class="terminal-host" bind:this={container}></div>

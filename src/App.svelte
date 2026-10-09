@@ -186,7 +186,6 @@
             <FocusView
               sessions={orderedSessions}
               activeKey={uiStore.focusedSessionKey}
-              theme={settingsStore.current.theme}
               scrollback={settingsStore.current.scrollbackLines}
               panelWidth={layoutStore.panels.focusPanelWidth}
               onPanelResize={(focusPanelWidth) => layoutStore.resize({ focusPanelWidth })}

@@ -47,8 +47,8 @@ export interface LiveSessionView {
   /** Every file the session touched; `files` carries only the first few. */
   filesTotal: number;
   contextPercent: number | null;
-  totalTokens: number;
-  costUsd: number;
+  /** Tokens Claude wrote in the session. */
+  outputTokens: number;
   memoryMb: number | null;
   origin: SessionOrigin;
   pid: number | null;

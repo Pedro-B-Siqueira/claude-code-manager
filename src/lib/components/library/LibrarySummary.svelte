@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SessionSummary } from '../../api/types';
-  import { formatCost, formatDuration, formatRelativeTime, formatTokens, ltrPath, relativePath } from '../../format';
+  import { formatDuration, formatRelativeTime, formatTokens, ltrPath, relativePath } from '../../format';
   import { diffHover } from '../../stores/diff-popover.svelte';
   import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
@@ -20,9 +20,6 @@
   let showAllFiles = $state(false);
 
   const item = $derived(summary.item);
-  const totalTokens = $derived(
-    summary.usage.input + summary.usage.output + summary.usage.cacheRead + summary.usage.cacheWrite5m + summary.usage.cacheWrite1h,
-  );
   const visibleFiles = $derived(showAllFiles ? summary.files : summary.files.slice(0, VISIBLE_FILES));
   const categoriesListId = 'known-categories';
 
@@ -92,10 +89,8 @@
   <section class="usage">
     <h4>Uso</h4>
     <dl>
-      <dt>Tokens</dt>
-      <dd class="mono">{formatTokens(totalTokens)}</dd>
-      <dt>Custo equivalente</dt>
-      <dd class="mono">{formatCost(item.costUsd)}{summary.unknownPricing ? ' + modelo sem preço' : ''}</dd>
+      <dt>Tokens escritos</dt>
+      <dd class="mono">{formatTokens(summary.usage.output)}</dd>
     </dl>
     <ContextMeter percent={summary.contextPercent} />
   </section>

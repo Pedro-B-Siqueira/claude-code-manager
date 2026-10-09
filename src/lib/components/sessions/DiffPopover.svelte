@@ -168,7 +168,7 @@
     min-height: 0;
     overflow: auto;
     border-radius: 8px;
-    background: var(--terminal-bg);
+    background: var(--code-bg);
     font-size: 11.5px;
     line-height: 1.5;
     padding: 6px 0;
@@ -199,7 +199,7 @@
   }
 
   .line.context {
-    color: var(--terminal-text);
+    color: var(--code-text);
   }
 
   .line.gap {
