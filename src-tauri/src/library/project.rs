@@ -46,6 +46,7 @@ fn main_repository_root(cwd: &Path) -> Option<PathBuf> {
         .arg("-C")
         .arg(cwd)
         .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .output()
         .ok()?;
     if !output.status.success() {

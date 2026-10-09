@@ -4,6 +4,15 @@ import type { LiveSessionView } from '../../api/types';
 import { MOCK_LIVE_SESSIONS } from '../../mock/sessions';
 import SessionCard from './SessionCard.svelte';
 
+vi.mock('../../api/commands', () => ({
+  fetchGitStatus: vi.fn(async () => {
+    throw new Error('git is not available in component tests');
+  }),
+  openVsCode: vi.fn(async () => ({ warning: null })),
+  openFinder: vi.fn(async () => undefined),
+  openPullRequest: vi.fn(async () => 'https://example.com/pull/1'),
+}));
+
 function session(overrides: Partial<LiveSessionView>): LiveSessionView {
   const base = MOCK_LIVE_SESSIONS[0];
   if (!base) throw new Error('mock data missing');

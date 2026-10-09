@@ -11,3 +11,5 @@ coverage/
 # Notas locais e a spec original ficam fora do repositorio publico
 .local/
 claude-code-manager-prompt.md
+.vitest/
+.claude/

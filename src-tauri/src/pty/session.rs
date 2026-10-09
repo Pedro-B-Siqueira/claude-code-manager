@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -13,6 +13,8 @@ use super::ring::OutputRing;
 use super::{OutputSink, PtyEvent, PtyNotifier};
 
 const READ_CHUNK_BYTES: usize = 32 * 1024;
+
+static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +36,7 @@ pub struct LaunchSpec {
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
     pub key: String,
+    pub instance: u64,
     pub launch: LaunchSpec,
     pub started_at: i64,
     pub last_output_at: i64,
@@ -60,6 +63,7 @@ struct ExitState {
 
 pub struct PtySession {
     pub key: String,
+    pub instance: u64,
     pub launch: LaunchSpec,
     started_at: i64,
     pid: Option<u32>,
@@ -93,6 +97,7 @@ impl PtySession {
         let started_at = now_ms();
         Self {
             key: parts.key,
+            instance: NEXT_INSTANCE.fetch_add(1, Ordering::Relaxed),
             launch: parts.launch,
             started_at,
             pid: parts.pid,
@@ -131,6 +136,7 @@ impl PtySession {
         let exit = lock(&self.exit);
         SessionSnapshot {
             key: self.key.clone(),
+            instance: self.instance,
             launch: self.launch.clone(),
             started_at: self.started_at,
             last_output_at: output.last_output_at,
@@ -209,7 +215,7 @@ pub fn spawn_reader(session: Arc<PtySession>, mut reader: Box<dyn Read + Send>, 
         }
         let code = child.wait().ok().map(|status| i32::try_from(status.exit_code()).unwrap_or(i32::MAX));
         session.mark_exited(code);
-        notify(PtyEvent::Exited { key: session.key.clone(), code });
+        notify(PtyEvent::Exited { key: session.key.clone(), code, instance: session.instance });
     });
     if let Err(error) = spawned {
         log::error!("falha ao iniciar a leitura do terminal: {error}");

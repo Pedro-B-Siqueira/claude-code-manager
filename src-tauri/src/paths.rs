@@ -1,7 +1,7 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::AppError;
 
@@ -63,10 +63,18 @@ impl AppPaths {
         self.app_support.join("logs")
     }
 
+    /// Refuses relative paths and anything that resolves (after `..` and symlinks) into Claude
+    /// Code's own files.
     pub fn ensure_writable(&self, target: &Path) -> Result<(), AppError> {
-        let user_config_file = self.home.join(".claude.json");
-        if target.starts_with(&self.claude_home) || target == user_config_file {
-            return Err(AppError::ForbiddenWrite(target.to_path_buf()));
+        let forbidden = || Err(AppError::ForbiddenWrite(target.to_path_buf()));
+        if !target.is_absolute() {
+            return forbidden();
+        }
+        let resolved = resolve_path(target);
+        let claude_home = resolve_path(&self.claude_home);
+        let user_config_file = resolve_path(&self.home.join(".claude.json"));
+        if resolved.starts_with(&claude_home) || resolved == user_config_file {
+            return forbidden();
         }
         Ok(())
     }
@@ -76,6 +84,43 @@ impl AppPaths {
         fs::create_dir_all(&self.app_support)?;
         Ok(())
     }
+}
+
+/// Removes `.` and `..` without touching the filesystem.
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other),
+        }
+    }
+    normalized
+}
+
+/// Canonical form of a path that may not exist yet: the longest existing ancestor is resolved
+/// (following symlinks) and the missing tail is appended.
+fn resolve_path(path: &Path) -> PathBuf {
+    let normalized = normalize_lexically(path);
+    let mut existing = normalized.clone();
+    let mut missing = Vec::new();
+    while !existing.exists() {
+        match existing.file_name() {
+            Some(name) => {
+                missing.push(name.to_owned());
+                existing.pop();
+            }
+            None => break,
+        }
+    }
+    let mut resolved = existing.canonicalize().unwrap_or(existing);
+    for part in missing.iter().rev() {
+        resolved.push(part);
+    }
+    resolved
 }
 
 fn non_empty_var(name: &str) -> Option<OsString> {
@@ -116,5 +161,25 @@ mod tests {
     fn allows_writes_inside_app_support() {
         let paths = sample_paths();
         assert!(paths.ensure_writable(&paths.database_file()).is_ok());
+    }
+
+    #[test]
+    fn rejects_relative_paths_and_dot_dot_escapes() {
+        let paths = sample_paths();
+        assert!(paths.ensure_writable(Path::new("relative/dir")).is_err());
+        assert!(paths.ensure_writable(Path::new("/Users/someone/projects/../.claude/wt")).is_err());
+        assert!(paths.ensure_writable(Path::new("/Users/someone/projects/./app")).is_ok());
+    }
+
+    #[test]
+    fn rejects_symlinks_that_point_into_claude_home() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_path_buf();
+        let claude_home = home.join(".claude");
+        std::fs::create_dir_all(&claude_home).unwrap();
+        std::os::unix::fs::symlink(&claude_home, home.join("shortcut")).unwrap();
+        let paths = AppPaths::new(home.clone(), claude_home, home.join("app"));
+        assert!(paths.ensure_writable(&home.join("shortcut/worktrees/x")).is_err());
+        assert!(paths.ensure_writable(&home.join("app/ccm.sqlite")).is_ok());
     }
 }

@@ -8,12 +8,14 @@
     sessionId?: string | null;
     basePath?: string | null;
     visibleCount?: number;
+    /** Files the session touched in total, when `files` is only the first few. */
+    totalCount?: number;
   }
 
-  let { files, sessionId = null, basePath = null, visibleCount = 3 }: Props = $props();
+  let { files, sessionId = null, basePath = null, visibleCount = 3, totalCount }: Props = $props();
 
   const visibleFiles = $derived(files.slice(0, visibleCount));
-  const hiddenCount = $derived(Math.max(0, files.length - visibleCount));
+  const hiddenCount = $derived(Math.max(0, Math.max(totalCount ?? 0, files.length) - visibleFiles.length));
 
   function diffRequest(path: string): DiffRequest | null {
     return sessionId ? { kind: 'file', sessionId, filePath: path, basePath } : null;

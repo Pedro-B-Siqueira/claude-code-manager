@@ -44,6 +44,8 @@ export interface LiveSessionView {
   statusDetail: string | null;
   previewLines: string[];
   files: FileChangeSummary[];
+  /** Every file the session touched; `files` carries only the first few. */
+  filesTotal: number;
   contextPercent: number | null;
   totalTokens: number;
   costUsd: number;

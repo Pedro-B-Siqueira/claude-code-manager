@@ -28,8 +28,14 @@ const INHERITED_TERMINAL_VARS: &[&str] = &[
 ];
 
 pub fn resolve_claude(configured: Option<&str>, shell: &ShellEnvironment, home: &Path) -> Result<PathBuf, AppError> {
-    if let Some(override_path) = env::var_os(CLAUDE_BINARY_OVERRIDE).filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(override_path));
+    let override_path = env::var_os(CLAUDE_BINARY_OVERRIDE).filter(|value| !value.is_empty()).map(PathBuf::from);
+    resolve_claude_with(override_path, configured, shell, home)
+}
+
+/// Precedence: the `CCM_CLAUDE_BIN` override, then the configured path, then the login PATH.
+pub fn resolve_claude_with(override_path: Option<PathBuf>, configured: Option<&str>, shell: &ShellEnvironment, home: &Path) -> Result<PathBuf, AppError> {
+    if let Some(override_path) = override_path {
+        return Ok(override_path);
     }
     if let Some(configured) = configured.map(str::trim).filter(|value| !value.is_empty()) {
         return Ok(expand_home(configured, home));
@@ -115,13 +121,13 @@ mod tests {
     }
 
     #[test]
-    fn configured_binary_expands_home() {
+    fn binary_resolution_precedence() {
         let shell = ShellEnvironment { shell: PathBuf::from("/bin/zsh"), path: String::new() };
-        if env::var_os(CLAUDE_BINARY_OVERRIDE).is_some() {
-            return;
-        }
-        let resolved = resolve_claude(Some("~/bin/claude"), &shell, Path::new("/Users/someone")).unwrap();
-        assert_eq!(resolved, PathBuf::from("/Users/someone/bin/claude"));
-        assert!(matches!(resolve_claude(None, &shell, Path::new("/h")), Err(AppError::ClaudeNotFound)));
+        let home = Path::new("/Users/someone");
+        let configured = resolve_claude_with(None, Some("~/bin/claude"), &shell, home).unwrap();
+        assert_eq!(configured, PathBuf::from("/Users/someone/bin/claude"));
+        let overridden = resolve_claude_with(Some(PathBuf::from("/fake/claude")), Some("~/bin/claude"), &shell, home).unwrap();
+        assert_eq!(overridden, PathBuf::from("/fake/claude"));
+        assert!(matches!(resolve_claude_with(None, Some("  "), &shell, home), Err(AppError::ClaudeNotFound)));
     }
 }

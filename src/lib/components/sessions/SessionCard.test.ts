@@ -4,6 +4,15 @@ import type { LiveSessionView } from '../../api/types';
 import { MOCK_LIVE_SESSIONS } from '../../mock/sessions';
 import SessionCard from './SessionCard.svelte';
 
+vi.mock('../../api/commands', () => ({
+  fetchGitStatus: vi.fn(async () => {
+    throw new Error('git is not available in component tests');
+  }),
+  openVsCode: vi.fn(async () => ({ warning: null })),
+  openFinder: vi.fn(async () => undefined),
+  openPullRequest: vi.fn(async () => 'https://example.com/pull/1'),
+}));
+
 function mockSession(index: number): LiveSessionView {
   const session = MOCK_LIVE_SESSIONS[index];
   if (!session) throw new Error(`mock session ${index} missing`);
@@ -35,5 +44,10 @@ describe('SessionCard', () => {
     render(SessionCard, { session: mockSession(0), onFocus });
     await fireEvent.click(screen.getByRole('button', { name: /Focar/ }));
     expect(onFocus).toHaveBeenCalledWith('mock-1');
+  });
+
+  it('counts every touched file, not only the ones listed on the card', () => {
+    render(SessionCard, { session: { ...mockSession(0), filesTotal: 9 }, onFocus: vi.fn() });
+    expect(screen.getByText('+6 arquivos')).toBeInTheDocument();
   });
 });

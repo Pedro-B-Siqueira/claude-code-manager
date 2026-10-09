@@ -81,7 +81,8 @@ impl AppSettings {
         self.claude_binary = self
             .claude_binary
             .filter(|binary| !binary.trim().is_empty());
-        self.worktree_root = self.worktree_root.filter(|root| !root.trim().is_empty());
+        // Only absolute folders or `~/…`; a relative path would land wherever git happens to run.
+        self.worktree_root = self.worktree_root.map(|root| root.trim().to_owned()).filter(|root| root.starts_with('/') || root.starts_with("~/"));
         self.branch_prefixes.retain(|prefix| !prefix.trim().is_empty() && prefix.len() <= 24);
         self.branch_prefixes.dedup();
         if self.branch_prefixes.is_empty() {
@@ -168,6 +169,15 @@ mod tests {
         let saved = save(&database, extreme).unwrap();
         assert_eq!(saved.scrollback_lines, 500);
         assert_eq!(saved.hibernation.idle_minutes, 5);
+    }
+
+    #[test]
+    fn worktree_root_must_be_absolute_or_home_relative() {
+        let with_root = |root: &str| AppSettings { worktree_root: Some(root.to_owned()), ..AppSettings::default() }.sanitized().worktree_root;
+        assert_eq!(with_root("~/worktrees").as_deref(), Some("~/worktrees"));
+        assert_eq!(with_root(" /srv/wt ").as_deref(), Some("/srv/wt"));
+        assert_eq!(with_root("worktrees"), None);
+        assert_eq!(with_root("   "), None);
     }
 
     #[test]

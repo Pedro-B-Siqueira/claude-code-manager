@@ -1,6 +1,6 @@
 //! Turns parsed transcript events into rows: session totals, file edits, activity and search text.
 
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::db::sql_int;
 use crate::error::AppError;
@@ -133,33 +133,39 @@ impl<'t, 's> SessionWriter<'t, 's> {
             return self.insert_activity("tool", Some(&tool_use.name), target.as_deref(), None);
         };
         let estimate = tool_use.input.estimated_delta(tool);
-        self.transaction.execute(
-            "INSERT INTO file_edits (session_id, tool_use_id, timestamp, tool, file_path, added, removed,
-                 transcript_path, line_offset, line_length, why, from_subagent)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-             ON CONFLICT(tool_use_id) DO NOTHING",
-            params![
-                self.source.session_id, tool_use.id, self.line_timestamp, tool.as_str(), file_path,
-                estimate.added, estimate.removed, self.source.transcript_path, sql_int(offset), sql_int(line_length),
-                self.cursor.last_assistant_text, self.source.is_subagent,
-            ],
-        )?;
-        let edit_id = self.transaction.last_insert_rowid();
+        let inserted: Option<i64> = self
+            .transaction
+            .query_row(
+                "INSERT INTO file_edits (session_id, tool_use_id, timestamp, tool, file_path, added, removed,
+                     transcript_path, line_offset, line_length, why, from_subagent)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT(session_id, tool_use_id) DO NOTHING
+                 RETURNING id",
+                params![
+                    self.source.session_id, tool_use.id, self.line_timestamp, tool.as_str(), file_path,
+                    estimate.added, estimate.removed, self.source.transcript_path, sql_int(offset), sql_int(line_length),
+                    self.cursor.last_assistant_text, self.source.is_subagent,
+                ],
+                |row| row.get(0),
+            )
+            .optional()?;
+        // Already recorded (the same line read twice): nothing new for the activity feed either.
+        let Some(edit_id) = inserted else { return Ok(()) };
         self.insert_activity("edit", Some(tool.as_str()), Some(file_path), Some(edit_id))
     }
 
     fn write_tool_result(&mut self, result: &ToolResult) -> Result<(), AppError> {
         if result.is_error {
             self.transaction.execute(
-                "UPDATE file_edits SET status = 'failed' WHERE tool_use_id = ?1",
-                params![result.tool_use_id],
+                "UPDATE file_edits SET status = 'failed' WHERE session_id = ?2 AND tool_use_id = ?1",
+                params![result.tool_use_id, self.source.session_id],
             )?;
             return Ok(());
         }
         let Some(outcome) = &result.outcome else {
             self.transaction.execute(
-                "UPDATE file_edits SET status = 'applied' WHERE tool_use_id = ?1",
-                params![result.tool_use_id],
+                "UPDATE file_edits SET status = 'applied' WHERE session_id = ?2 AND tool_use_id = ?1",
+                params![result.tool_use_id, self.source.session_id],
             )?;
             return Ok(());
         };
@@ -170,8 +176,11 @@ impl<'t, 's> SessionWriter<'t, 's> {
                  added = CASE WHEN ?2 THEN added ELSE ?3 END,
                  removed = CASE WHEN ?2 THEN 0 ELSE ?4 END,
                  new_start = ?5, new_end = ?6
-             WHERE tool_use_id = ?1",
-            params![result.tool_use_id, outcome.is_new_file(), delta.added, delta.removed, range.map(|(start, _)| sql_int(start)), range.map(|(_, end)| sql_int(end))],
+             WHERE session_id = ?7 AND tool_use_id = ?1",
+            params![
+                result.tool_use_id, outcome.is_new_file(), delta.added, delta.removed,
+                range.map(|(start, _)| sql_int(start)), range.map(|(_, end)| sql_int(end)), self.source.session_id,
+            ],
         )?;
         Ok(())
     }

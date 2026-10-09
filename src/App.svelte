@@ -45,8 +45,8 @@
     if (import.meta.env.DEV) void import('./lib/dev/scenario').then(({ runDevScenario }) => runDevScenario());
   });
 
-  function wakeSession(session: LiveSessionView): void {
-    void liveSessionsStore.wake(session.key);
+  async function wakeSession(session: LiveSessionView): Promise<boolean> {
+    return (await liveSessionsStore.wake(session.key)) !== null;
   }
 
   const orderedSessions = $derived(orderSessions(liveSessionsStore.sessions, layoutStore.gridOrder));

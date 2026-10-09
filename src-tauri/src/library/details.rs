@@ -175,3 +175,44 @@ pub fn activity(connection: &Connection, session_id: &str, limit: u32) -> Result
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::diff::DiffLineKind;
+
+    #[test]
+    fn multi_edit_input_concatenates_each_edit_diff() {
+        let input: EditInput = serde_json::from_str(
+            r#"{"file_path":"/a.ts","edits":[{"old_string":"a","new_string":"b"},{"old_string":"x","new_string":"y\nz"}]}"#,
+        )
+        .unwrap();
+        let (lines, is_new_file) = diff_for_input(&input);
+        assert!(!is_new_file);
+        let added: Vec<&str> = lines.iter().filter(|line| line.kind == DiffLineKind::Added).map(|line| line.text.as_str()).collect();
+        assert_eq!(added, vec!["b", "y", "z"]);
+    }
+
+    #[test]
+    fn a_vanished_transcript_degrades_to_an_empty_diff() {
+        let row = EditRow {
+            id: 1,
+            tool_use_id: "t".to_owned(),
+            tool: "Edit".to_owned(),
+            file_path: "/a.ts".to_owned(),
+            timestamp: None,
+            new_start: None,
+            new_end: None,
+            added: 1,
+            removed: 0,
+            is_new_file: false,
+            why: None,
+            transcript_path: "/nonexistent/session.jsonl".to_owned(),
+            line_offset: 0,
+            line_length: 10,
+        };
+        let detail = edit_detail(row);
+        assert!(detail.lines.is_empty());
+        assert!(!detail.truncated);
+    }
+}

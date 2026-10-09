@@ -253,3 +253,70 @@ fn activity_feed_lists_prompts_tools_and_edits_newest_first() {
     assert!(activity.iter().any(|item| item.from_subagent));
     assert!(activity.windows(2).all(|pair| pair[0].id > pair[1].id));
 }
+
+#[test]
+fn tiny_commit_chunks_carry_dedupe_and_why_between_commits() {
+    let workspace = Workspace::new();
+    fixtures::install_demo_session(&workspace.projects);
+    let indexer = workspace.indexer().with_lines_per_commit(2);
+    indexer.index_paths(&indexer.discover()).unwrap();
+
+    let database = workspace.reader();
+    assert_demo_totals(&database);
+    let why: Option<String> = database
+        .connection()
+        .query_row("SELECT why FROM file_edits WHERE tool_use_id = 'toolu_1'", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(why.as_deref(), Some("Vou adicionar a paginação no hook de pedidos."));
+}
+
+#[test]
+fn a_replaced_file_or_an_in_place_rewrite_is_read_again_from_the_start() {
+    let workspace = Workspace::new();
+    let demo = fixtures::install_demo_session(&workspace.projects);
+    workspace.index_everything();
+    let original = fs::read_to_string(&demo.main_transcript).unwrap();
+
+    let replacement = workspace.projects.join("replacement.tmp");
+    fs::write(&replacement, format!("{original}\n")).unwrap();
+    fs::rename(&replacement, &demo.main_transcript).unwrap();
+    workspace.indexer().index_file(&demo.main_transcript).unwrap();
+    assert_demo_totals(&workspace.reader());
+
+    let mut shifted = String::from("{\"type\":\"permission-mode\",\"permissionMode\":\"default\",\"padding\":\"xxxxxxxxxxxx\"}\n");
+    shifted.push_str(&original);
+    let mut file = fs::OpenOptions::new().write(true).truncate(false).open(&demo.main_transcript).unwrap();
+    file.write_all(shifted.as_bytes()).unwrap();
+    drop(file);
+    workspace.indexer().index_file(&demo.main_transcript).unwrap();
+    assert_demo_totals(&workspace.reader());
+}
+
+#[test]
+fn a_forked_session_keeps_its_own_edits_and_activity_links() {
+    let workspace = Workspace::new();
+    let demo = fixtures::install_demo_session(&workspace.projects);
+    let fork = demo.main_transcript.with_file_name("22222222-2222-4222-8222-222222222222.jsonl");
+    fs::copy(&demo.main_transcript, &fork).unwrap();
+    workspace.index_everything();
+
+    let database = workspace.reader();
+    let connection = database.connection();
+    let per_session: Vec<(String, i64)> = connection
+        .prepare("SELECT session_id, COUNT(*) FROM file_edits WHERE from_subagent = 0 GROUP BY session_id ORDER BY session_id")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(per_session.len(), 2);
+    assert_eq!(per_session[0].1, per_session[1].1);
+    let mismatched: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM activity a JOIN file_edits e ON e.id = a.edit_id WHERE a.session_id <> e.session_id",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(mismatched, 0, "every edit link points into its own session");
+}

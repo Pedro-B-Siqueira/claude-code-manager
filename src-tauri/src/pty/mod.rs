@@ -18,7 +18,8 @@ pub trait OutputSink: Send {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PtyEvent {
     PreviewChanged { key: String, lines: Vec<String> },
-    Exited { key: String, code: Option<i32> },
+    /// `instance` tells apart a session's earlier process from the one that replaced it (wake).
+    Exited { key: String, code: Option<i32>, instance: u64 },
 }
 
 pub type PtyNotifier = Arc<dyn Fn(PtyEvent) + Send + Sync>;

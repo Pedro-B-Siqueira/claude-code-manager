@@ -72,8 +72,11 @@ pub async fn session_new(state: State<'_, AppState>, app: AppHandle, cwd: String
 
 #[tauri::command]
 pub async fn session_resume(state: State<'_, AppState>, app: AppHandle, session_id: String) -> Result<LiveSessionView, AppError> {
-    let already_open = state.pty.snapshots().into_iter().find(|snapshot| snapshot.launch.session_id == session_id && !snapshot.exited);
-    if let Some(snapshot) = already_open {
+    let existing = state.pty.snapshots().into_iter().find(|snapshot| snapshot.launch.session_id == session_id && (!snapshot.exited || snapshot.hibernated));
+    if let Some(snapshot) = existing {
+        if snapshot.hibernated {
+            return wake(&state, &app, &snapshot.key);
+        }
         return find_view(&state, &snapshot.key);
     }
     let summary = queries::session_summary(&state.database.connection(), &session_id)?.ok_or_else(|| AppError::UnknownSession(session_id.clone()))?;
@@ -156,17 +159,25 @@ pub async fn recent_dirs(state: State<'_, AppState>) -> Result<Vec<String>, AppE
     Ok(directories)
 }
 
-/// Brings a hibernated session back with `claude --resume`, keeping its card (same key).
+const WAKE_GRACE: Duration = Duration::from_secs(5);
+
+/// Brings a hibernated session back with `claude --resume`, keeping its card (same key). If the
+/// new process cannot start (say, its folder is gone), the hibernated card stays as it was.
+fn wake(state: &AppState, app: &AppHandle, key: &str) -> Result<LiveSessionView, AppError> {
+    let snapshot = state.pty.snapshot(key)?;
+    if !snapshot.hibernated {
+        return find_view(state, key);
+    }
+    state.pty.wait_for_exit(key, WAKE_GRACE);
+    let spec = LaunchSpec { mode: LaunchMode::Resume, ..snapshot.launch };
+    let view = launch_with_key(state, app, spec, key.to_owned())?;
+    state.status.forget(key);
+    Ok(view)
+}
+
 #[tauri::command]
 pub async fn session_wake(state: State<'_, AppState>, app: AppHandle, key: String) -> Result<LiveSessionView, AppError> {
-    let snapshot = state.pty.snapshot(&key)?;
-    if !snapshot.hibernated {
-        return find_view(&state, &key);
-    }
-    state.pty.forget(&key);
-    state.status.forget(&key);
-    let spec = LaunchSpec { mode: LaunchMode::Resume, ..snapshot.launch };
-    launch_with_key(&state, &app, spec, key)
+    wake(&state, &app, &key)
 }
 
 /// The UI reports whether the window is visible; terminal previews pause while it is not.

@@ -144,3 +144,45 @@ impl<'de> Visitor<'de> for CountVisitor {
         Ok(0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde::Deserialize;
+
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct Probe {
+        #[serde(deserialize_with = "super::count")]
+        count: u64,
+        #[serde(deserialize_with = "super::flag")]
+        flag: bool,
+        #[serde(deserialize_with = "super::string")]
+        text: Option<String>,
+    }
+
+    fn probe(json: &str) -> Probe {
+        serde_json::from_str(json).expect("lenient fields never fail the record")
+    }
+
+    #[test]
+    fn counts_accept_numbers_strings_and_garbage() {
+        assert_eq!(probe(r#"{"count":5}"#).count, 5);
+        assert_eq!(probe(r#"{"count":"7"}"#).count, 7);
+        assert_eq!(probe(r#"{"count":1.9}"#).count, 1);
+        for odd in ["-1", "null", "true", "[1]", "{}", "\"x\""] {
+            assert_eq!(probe(&format!(r#"{{"count":{odd}}}"#)).count, 0, "{odd}");
+        }
+    }
+
+    #[test]
+    fn flags_and_strings_ignore_unexpected_types() {
+        assert!(probe(r#"{"flag":true}"#).flag);
+        for odd in ["\"yes\"", "1", "null", "[]", "{}"] {
+            assert!(!probe(&format!(r#"{{"flag":{odd}}}"#)).flag, "{odd}");
+        }
+        assert_eq!(probe(r#"{"text":"ok"}"#).text.as_deref(), Some("ok"));
+        for odd in ["1", "false", "null", "[\"a\"]", "{\"a\":1}"] {
+            assert_eq!(probe(&format!(r#"{{"text":{odd}}}"#)).text, None, "{odd}");
+        }
+    }
+}

@@ -47,7 +47,7 @@
     const next = navigableIds[Math.min(navigableIds.length - 1, Math.max(0, current + step))];
     if (next) {
       void libraryStore.select(next);
-      document.querySelector(`[data-session-id="${next}"]`)?.scrollIntoView({ block: 'nearest' });
+      document.querySelector(`[data-session-id="${next}"]`)?.scrollIntoView?.({ block: 'nearest' });
     }
   }
 

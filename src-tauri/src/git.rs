@@ -44,8 +44,16 @@ impl Git {
         Self { binary }
     }
 
+    /// `GIT_OPTIONAL_LOCKS=0` keeps read commands from refreshing (rewriting) the repository's index,
+    /// which could otherwise make the user's own `git commit` fail on `index.lock`.
     fn run(&self, cwd: &Path, args: &[&str]) -> Result<String, AppError> {
-        let output = Command::new(&self.binary).arg("-C").arg(cwd).args(args).env("GIT_TERMINAL_PROMPT", "0").output()?;
+        let output = Command::new(&self.binary)
+            .arg("-C")
+            .arg(cwd)
+            .args(args)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_OPTIONAL_LOCKS", "0")
+            .output()?;
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim_end().to_owned())
         } else {
@@ -57,9 +65,10 @@ impl Git {
         self.run(cwd, &["branch", "--show-current"]).ok().filter(|branch| !branch.is_empty())
     }
 
-    /// Lines added/removed against HEAD, staged and unstaged together (`git diff HEAD --numstat`).
+    /// Lines added/removed against HEAD, staged and unstaged together. Uses the `diff-index`
+    /// plumbing: unlike `git diff`, it never refreshes the index file.
     pub fn diff_stat(&self, cwd: &Path) -> Result<DiffStat, AppError> {
-        Ok(parse_numstat(&self.run(cwd, &["diff", "HEAD", "--numstat"])?))
+        Ok(parse_numstat(&self.run(cwd, &["diff-index", "--numstat", "HEAD"])?))
     }
 
     pub fn main_repository(&self, cwd: &Path) -> Option<PathBuf> {
@@ -127,6 +136,10 @@ pub fn parse_numstat(text: &str) -> DiffStat {
     for line in text.lines() {
         let mut fields = line.splitn(3, '\t');
         let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next()) else { continue };
+        // Without an index refresh, files only touched (same content) show up as 0/0: not a change.
+        if added == "0" && removed == "0" {
+            continue;
+        }
         // Binary files report "-" for both counts.
         let added = added.parse().unwrap_or(0);
         let removed = removed.parse().unwrap_or(0);
@@ -217,7 +230,7 @@ mod tests {
 
     #[test]
     fn parses_numstat_including_binary_files() {
-        let stat = parse_numstat("10\t2\tsrc/a.ts\n-\t-\tlogo.png\n3\t0\tdocs/b.md");
+        let stat = parse_numstat("10\t2\tsrc/a.ts\n-\t-\tlogo.png\n3\t0\tdocs/b.md\n0\t0\ttouched-only.ts");
         assert_eq!((stat.added, stat.removed, stat.files.len()), (13, 2, 3));
         assert_eq!(stat.files[1], FileStat { path: "logo.png".to_owned(), added: 0, removed: 0 });
     }

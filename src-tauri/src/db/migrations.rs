@@ -13,7 +13,39 @@ const MIGRATIONS: &[&str] = &[
         session_id TEXT PRIMARY KEY,
         position   INTEGER NOT NULL
     ) STRICT;",
+    EDITS_PER_SESSION,
 ];
+
+/// Edits become unique per session (a forked session keeps its own copies). Only derived data is
+/// rebuilt: the transcripts are re-read on the next start; names, tags and pins are kept.
+const EDITS_PER_SESSION: &str = "
+    DROP TABLE file_edits;
+    CREATE TABLE file_edits (
+        id              INTEGER PRIMARY KEY,
+        session_id      TEXT NOT NULL,
+        tool_use_id     TEXT NOT NULL,
+        timestamp       INTEGER,
+        tool            TEXT NOT NULL,
+        file_path       TEXT NOT NULL,
+        new_start       INTEGER,
+        new_end         INTEGER,
+        added           INTEGER NOT NULL,
+        removed         INTEGER NOT NULL,
+        is_new_file     INTEGER NOT NULL DEFAULT 0,
+        status          TEXT NOT NULL DEFAULT 'pending',
+        transcript_path TEXT NOT NULL,
+        line_offset     INTEGER NOT NULL,
+        line_length     INTEGER NOT NULL,
+        why             TEXT,
+        from_subagent   INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (session_id, tool_use_id)
+    ) STRICT;
+    CREATE INDEX file_edits_session ON file_edits(session_id, file_path);
+    DELETE FROM activity;
+    DELETE FROM session_fts;
+    DELETE FROM sessions;
+    DELETE FROM transcript_files;
+";
 
 const LIBRARY_SCHEMA: &str = "
     CREATE TABLE transcript_files (
@@ -121,12 +153,19 @@ const LIBRARY_SCHEMA: &str = "
 ";
 
 pub fn apply(connection: &Connection) -> Result<(), AppError> {
+    apply_steps(connection, MIGRATIONS)
+}
+
+/// Each step runs in its own transaction together with the version bump, so a failure leaves
+/// neither a half-built schema nor a version that lies about it.
+fn apply_steps(connection: &Connection, steps: &[&str]) -> Result<(), AppError> {
     let applied: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let applied = usize::try_from(applied).unwrap_or(0);
-    for (index, statement) in MIGRATIONS.iter().enumerate().skip(applied) {
-        connection.execute_batch(statement)?;
+    for (index, statement) in steps.iter().enumerate().skip(applied) {
         let version = i64::try_from(index + 1).unwrap_or(i64::MAX);
-        connection.pragma_update(None, "user_version", version)?;
+        connection.execute_batch(&format!("BEGIN; {statement}; PRAGMA user_version = {version}; COMMIT;")).inspect_err(|_| {
+            let _ = connection.execute_batch("ROLLBACK;");
+        })?;
     }
     Ok(())
 }
@@ -134,6 +173,46 @@ pub fn apply(connection: &Connection) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn table_exists(connection: &Connection, name: &str) -> bool {
+        connection
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1", [name], |row| row.get::<_, i64>(0))
+            .unwrap()
+            > 0
+    }
+
+    #[test]
+    fn a_failing_step_leaves_no_partial_schema() {
+        let connection = Connection::open_in_memory().unwrap();
+        let steps = ["CREATE TABLE first (id INTEGER) STRICT;", "CREATE TABLE second (id INTEGER) STRICT; CREATE TABLE broken (;"];
+        assert!(apply_steps(&connection, &steps).is_err());
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(version, 1);
+        assert!(table_exists(&connection, "first"));
+        assert!(!table_exists(&connection, "second"), "the failed step rolled back entirely");
+        let fixed = ["CREATE TABLE first (id INTEGER) STRICT;", "CREATE TABLE second (id INTEGER) STRICT;"];
+        apply_steps(&connection, &fixed).unwrap();
+        assert!(table_exists(&connection, "second"));
+    }
+
+    #[test]
+    fn upgrading_keeps_user_data_and_rebuilds_derived_data() {
+        let connection = Connection::open_in_memory().unwrap();
+        apply_steps(&connection, &MIGRATIONS[..3]).unwrap();
+        connection.execute_batch(
+            "INSERT INTO session_meta (session_id, custom_name, pinned) VALUES ('s', 'Minha', 1);
+             INSERT INTO tags (name) VALUES ('review');
+             INSERT INTO sessions (id, project_dir) VALUES ('s', 'p');
+             INSERT INTO transcript_files (path, session_id, is_subagent, inode, size, byte_offset, modified_ms) VALUES ('/t', 's', 0, 1, 1, 1, 1);",
+        )
+        .unwrap();
+        apply(&connection).unwrap();
+        let name: String = connection.query_row("SELECT custom_name FROM session_meta WHERE session_id = 's'", [], |row| row.get(0)).unwrap();
+        assert_eq!(name, "Minha");
+        assert_eq!(connection.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get::<_, i64>(0)).unwrap(), 1);
+        assert_eq!(connection.query_row("SELECT COUNT(*) FROM transcript_files", [], |row| row.get::<_, i64>(0)).unwrap(), 0, "re-read on next start");
+        assert!(table_exists(&connection, "grid_order"));
+    }
 
     #[test]
     fn applying_twice_is_a_no_op() {

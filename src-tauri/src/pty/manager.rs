@@ -136,6 +136,23 @@ impl PtyManager {
         Ok(self.session(key)?.snapshot())
     }
 
+    /// Whether `instance` is still the process behind `key` (it is not once the session was woken).
+    pub fn is_current(&self, key: &str, instance: u64) -> bool {
+        lock(&self.sessions).get(key).is_some_and(|session| session.instance == instance)
+    }
+
+    /// Waits up to `grace` for the session's process to end, then kills what is left of its group.
+    pub fn wait_for_exit(&self, key: &str, grace: Duration) {
+        let Ok(session) = self.session(key) else { return };
+        let deadline = std::time::Instant::now() + grace;
+        while session.is_running() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(50));
+        }
+        if session.is_running() || group_alive(session.pid()) {
+            signal_group(session.pid(), libc::SIGKILL);
+        }
+    }
+
     pub fn running_keys(&self) -> Vec<String> {
         lock(&self.sessions).values().filter(|session| session.is_running()).map(|session| session.key.clone()).collect()
     }
@@ -180,7 +197,7 @@ impl PtyManager {
         while running.iter().any(|session| session.is_running()) && std::time::Instant::now() < deadline {
             thread::sleep(Duration::from_millis(50));
         }
-        for session in running.iter().filter(|session| session.is_running()) {
+        for session in running.iter().filter(|session| session.is_running() || group_alive(session.pid())) {
             signal_group(session.pid(), libc::SIGKILL);
         }
     }
@@ -199,13 +216,18 @@ fn signal_group(pid: Option<u32>, signal: libc::c_int) {
     }
 }
 
+/// True while any process of the group is alive. The leader may already be gone while a child
+/// that ignores SIGHUP (an MCP server, a dev server) keeps running.
+fn group_alive(pid: Option<u32>) -> bool {
+    let Some(raw_pid) = pid.and_then(|pid| libc::pid_t::try_from(pid).ok()).filter(|pid| *pid > 1) else { return false };
+    unsafe { libc::killpg(raw_pid, 0) == 0 }
+}
+
 fn terminate_process_group(pid: Option<u32>, grace: Duration) {
     signal_group(pid, libc::SIGHUP);
     let spawned = thread::Builder::new().name("pty-terminate".to_owned()).spawn(move || {
         thread::sleep(grace);
-        let Some(raw_pid) = pid.and_then(|pid| libc::pid_t::try_from(pid).ok()) else { return };
-        let still_alive = unsafe { libc::kill(raw_pid, 0) } == 0;
-        if still_alive {
+        if group_alive(pid) {
             signal_group(pid, libc::SIGKILL);
         }
     });

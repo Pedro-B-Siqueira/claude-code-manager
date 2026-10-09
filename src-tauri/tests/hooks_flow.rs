@@ -69,27 +69,44 @@ fn server_accepts_only_authenticated_hook_posts() {
     assert_eq!(post(port, "/hook", "session-a", &token, "{not json"), 400);
     assert_eq!(raw_request(port, "GET /hook HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"), 405);
 
-    wait_until("accepted event", || !recorder.events.lock().unwrap().is_empty());
-    thread::sleep(Duration::from_millis(100));
+    // Requests are handled in order, so once this sentinel arrives every earlier one was processed.
+    assert_eq!(post(port, "/hook", "session-a", &token, r#"{"hook_event_name":"SessionEnd"}"#), 200);
+    wait_until("sentinel", || recorder.events.lock().unwrap().iter().any(|event| event.payload.event() == "SessionEnd"));
     let events = recorder.events.lock().unwrap();
-    assert_eq!(events.len(), 1, "only the authenticated request is delivered");
-    assert_eq!((events[0].session_key.as_str(), events[0].payload.event()), ("session-a", "Stop"));
+    let delivered: Vec<&str> = events.iter().map(|event| event.payload.event()).collect();
+    assert_eq!(delivered, vec!["Stop", "SessionEnd"], "only authenticated requests are delivered");
+    assert!(events.iter().all(|event| event.session_key == "session-a"));
 }
 
 #[test]
 fn server_listens_on_loopback_only() {
     let recorder = start_server();
+    assert!(recorder.server.address().ip().is_loopback());
+    assert!(TcpStream::connect(("127.0.0.1", recorder.server.port())).is_ok());
+}
+
+#[test]
+fn oversized_unauthenticated_and_revoked_requests_are_rejected() {
+    let recorder = start_server();
     let port = recorder.server.port();
-    assert!(TcpStream::connect(("127.0.0.1", port)).is_ok());
-    let non_loopback = std::net::UdpSocket::bind("0.0.0.0:0")
-        .and_then(|socket| socket.connect("192.0.2.1:9").map(|()| socket))
-        .and_then(|socket| socket.local_addr())
-        .map(|address| address.ip());
-    if let Ok(ip) = non_loopback {
-        if !ip.is_loopback() && !ip.is_unspecified() {
-            assert!(TcpStream::connect_timeout(&(ip, port).into(), Duration::from_millis(300)).is_err());
-        }
-    }
+    let token = recorder.tokens.issue("session-a");
+    let huge = format!(r#"{{"hook_event_name":"Stop","pad":"{}"}}"#, "x".repeat(2 * 1024 * 1024));
+    assert_eq!(post(port, "/hook", "session-a", &token, &huge), 413);
+    assert_eq!(raw_request(port, "POST /hook HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"), 401);
+    recorder.tokens.revoke("session-a");
+    assert_eq!(post(port, "/hook", "session-a", &token, r#"{"hook_event_name":"Stop"}"#), 401);
+    let preflight = raw_full_response(port, "OPTIONS /hook HTTP/1.1\r\nHost: x\r\nOrigin: https://example.com\r\nConnection: close\r\n\r\n");
+    assert!(preflight.starts_with("HTTP/1.1 405"));
+    assert!(!preflight.to_lowercase().contains("access-control-allow"), "no CORS: browsers cannot call the hook endpoint");
+    assert!(recorder.events.lock().unwrap().is_empty());
+}
+
+fn raw_full_response(port: u16, request: &str) -> String {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream.write_all(request.as_bytes()).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    response
 }
 
 #[derive(Clone, Default)]

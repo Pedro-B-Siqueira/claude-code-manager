@@ -16,6 +16,8 @@ use crate::error::AppError;
 use crate::paths::AppPaths;
 
 const DEBOUNCE: Duration = Duration::from_millis(400);
+/// How often to check whether `~/.claude/projects` appeared (fresh installs have none yet).
+const ROOT_POLL: Duration = Duration::from_secs(30);
 const CHANGE_NOTICE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,14 +31,23 @@ pub type LibraryNotifier = Arc<dyn Fn(LibraryNotice) + Send + Sync>;
 pub type SharedProgress = Arc<Mutex<IndexProgress>>;
 
 pub fn start(paths: &AppPaths, progress: SharedProgress, notify: LibraryNotifier) -> Result<(), AppError> {
+    start_with_poll(paths, progress, notify, ROOT_POLL)
+}
+
+pub fn start_with_poll(paths: &AppPaths, progress: SharedProgress, notify: LibraryNotifier, root_poll: Duration) -> Result<(), AppError> {
     let indexer = Indexer::new(Database::open(&paths.database_file())?, paths.claude_home().join("projects"));
     thread::Builder::new()
         .name("library-indexer".to_owned())
-        .spawn(move || run(indexer, progress, notify))?;
+        .spawn(move || run(indexer, progress, notify, root_poll))?;
     Ok(())
 }
 
-fn run(indexer: Indexer, progress: SharedProgress, notify: LibraryNotifier) {
+fn run(mut indexer: Indexer, progress: SharedProgress, notify: LibraryNotifier, root_poll: Duration) {
+    while !indexer.projects_root().is_dir() {
+        publish_progress(&progress, &notify, IndexProgress::default());
+        thread::sleep(root_poll);
+    }
+    indexer.use_canonical_root();
     let (sender, receiver) = mpsc::channel::<DebounceEventResult>();
     let watcher = watch(&indexer, sender);
     if let Err(error) = indexer.prune_missing() {
@@ -50,10 +61,6 @@ fn run(indexer: Indexer, progress: SharedProgress, notify: LibraryNotifier) {
 
 fn watch(indexer: &Indexer, sender: mpsc::Sender<DebounceEventResult>) -> Option<Debouncer<RecommendedWatcher>> {
     let root = indexer.projects_root();
-    if !root.is_dir() {
-        log::info!("{} ainda não existe; biblioteca sem atualização ao vivo", root.display());
-        return None;
-    }
     let mut debouncer = new_debouncer(DEBOUNCE, sender)
         .inspect_err(|error| log::warn!("não foi possível observar transcripts: {error}"))
         .ok()?;

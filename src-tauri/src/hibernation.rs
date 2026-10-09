@@ -30,7 +30,7 @@ pub fn start(app: AppHandle, on_change: Arc<dyn Fn() + Send + Sync>) {
     let spawned = thread::Builder::new().name("hibernation".to_owned()).spawn(move || loop {
         thread::sleep(CHECK_INTERVAL);
         let Some(state) = app.try_state::<AppState>() else { continue };
-        if hibernate_idle_sessions(&state) > 0 {
+        if hibernate_idle_sessions(&state, now_ms()) > 0 {
             on_change();
         }
     });
@@ -39,13 +39,12 @@ pub fn start(app: AppHandle, on_change: Arc<dyn Fn() + Send + Sync>) {
     }
 }
 
-fn hibernate_idle_sessions(state: &AppState) -> usize {
+pub fn hibernate_idle_sessions(state: &AppState, now: i64) -> usize {
     let Ok(preferences) = settings::load(&state.database).map(|settings| settings.hibernation) else { return 0 };
     if !preferences.enabled {
         return 0;
     }
     let idle_ms = i64::from(preferences.idle_minutes) * 60_000;
-    let now = now_ms();
     let mut hibernated = 0;
     for snapshot in state.pty.snapshots().into_iter().filter(|snapshot| !snapshot.exited && !snapshot.hibernated) {
         let tracked = state.status.current_with_time(&snapshot.key, now);

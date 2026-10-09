@@ -100,7 +100,12 @@ struct ExitPayload {
 fn pty_notifier(app: AppHandle) -> PtyNotifier {
     Arc::new(move |event| match event {
         PtyEvent::PreviewChanged { key, lines } => emit_or_log(&app, "session:preview", PreviewPayload { key, lines }),
-        PtyEvent::Exited { key, code } => {
+        PtyEvent::Exited { key, code, instance } => {
+            // A woken session reuses its key; the old process exiting must not touch the new one.
+            let current = app.try_state::<AppState>().is_some_and(|state| state.pty.is_current(&key, instance));
+            if !current {
+                return;
+            }
             if let Some(state) = app.try_state::<AppState>() {
                 state.hook_tokens.revoke(&key);
             }

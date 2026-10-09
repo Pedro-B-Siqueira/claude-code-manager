@@ -12,18 +12,17 @@ use ccm_lib::shell_env::shell_quote;
 
 const WAIT: Duration = Duration::from_secs(10);
 
+/// Always rebuilt (a no-op when up to date) so edits to the fake binary are never tested stale.
 fn fake_claude_binary() -> PathBuf {
-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/fake-claude");
-    if !binary.exists() {
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-        let status = Command::new(cargo)
-            .args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"])
-            .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-            .status()
-            .expect("cargo build fake-claude");
-        assert!(status.success());
-    }
-    binary
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let status = Command::new(cargo)
+        .args(["build", "--quiet", "-p", "fake-claude", "--manifest-path"])
+        .arg(manifest.join("Cargo.toml"))
+        .status()
+        .expect("cargo build fake-claude");
+    assert!(status.success());
+    manifest.join("target/debug/fake-claude")
 }
 
 #[derive(Clone, Default)]
@@ -67,9 +66,19 @@ impl Harness {
         sink
     }
 
+    /// Runs an arbitrary script in the PTY (for lifecycle tests that need stubborn processes).
+    fn spawn_script(&self, key: &str, script: &str) -> CollectingSink {
+        let launch = LaunchSpec { session_id: key.to_owned(), cwd: self.workdir.path().to_path_buf(), mode: LaunchMode::New, worktree: None };
+        let command = CommandLine { program: PathBuf::from("/bin/sh"), args: vec!["-c".to_owned(), script.to_owned()], env: vec![], env_remove: vec![] };
+        self.manager.spawn(SpawnRequest { key: key.to_owned(), launch, command, scrollback_lines: 500 }).expect("spawn");
+        let sink = CollectingSink::default();
+        self.manager.attach(key, Box::new(sink.clone())).unwrap();
+        sink
+    }
+
     fn exited(&self, key: &str) -> Option<Option<i32>> {
         self.events.lock().unwrap().iter().find_map(|event| match event {
-            PtyEvent::Exited { key: exited_key, code } if exited_key == key => Some(*code),
+            PtyEvent::Exited { key: exited_key, code, .. } if exited_key == key => Some(*code),
             _ => None,
         })
     }
@@ -159,4 +168,46 @@ fn hibernating_ends_the_process_but_keeps_the_card() {
     let snapshot = harness.manager.snapshot("s6").unwrap();
     assert!(snapshot.exited && snapshot.hibernated);
     assert!(harness.manager.running_keys().is_empty());
+}
+
+fn group_alive(pid: i32) -> bool {
+    unsafe { libc::killpg(pid, 0) == 0 }
+}
+
+#[test]
+fn close_escalates_to_sigkill_when_a_child_ignores_sighup() {
+    let harness = Harness::new();
+    let sink = harness.spawn_script("stubborn", "(trap '' HUP; echo child-ready; exec sleep 60) & wait");
+    wait_until("child running", || sink.text().contains("child-ready"));
+    let pid = harness.manager.snapshot("stubborn").unwrap().pid.unwrap() as i32;
+    harness.manager.close("stubborn", Duration::from_millis(300)).unwrap();
+    wait_until("whole process group gone", || !group_alive(pid));
+}
+
+#[test]
+fn shutdown_kills_groups_whose_leader_already_left() {
+    let harness = Harness::new();
+    let sink = harness.spawn_script("orphans", "(trap '' HUP; echo child-ready; exec sleep 60) & wait");
+    wait_until("child running", || sink.text().contains("child-ready"));
+    let pid = harness.manager.snapshot("orphans").unwrap().pid.unwrap() as i32;
+    harness.manager.shutdown_all(Duration::from_millis(300));
+    wait_until("whole process group gone", || !group_alive(pid));
+}
+
+#[test]
+fn a_reused_key_keeps_old_and_new_processes_apart() {
+    let harness = Harness::new();
+    let first = harness.spawn("reused");
+    wait_until("first banner", || first.text().contains("fake-claude ready"));
+    let old_instance = harness.manager.snapshot("reused").unwrap().instance;
+    harness.manager.hibernate("reused", Duration::from_millis(300)).unwrap();
+    harness.manager.wait_for_exit("reused", Duration::from_secs(5));
+    let second = harness.spawn("reused");
+    wait_until("second banner", || second.text().contains("fake-claude ready"));
+    let new_instance = harness.manager.snapshot("reused").unwrap().instance;
+    assert_ne!(old_instance, new_instance);
+    assert!(!harness.manager.is_current("reused", old_instance));
+    assert!(harness.manager.is_current("reused", new_instance));
+    assert!(!harness.manager.snapshot("reused").unwrap().hibernated, "the new process starts awake");
+    harness.manager.close("reused", Duration::from_millis(300)).unwrap();
 }

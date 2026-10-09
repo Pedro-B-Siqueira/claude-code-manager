@@ -22,20 +22,29 @@
     onPanelResize: (width: number) => void;
     onSelect: (key: string) => void;
     onResume: (session: LiveSessionView) => void;
-    onWake: (session: LiveSessionView) => void;
+    onWake: (session: LiveSessionView) => Promise<boolean>;
     onNewSession: () => void;
   }
 
   let { sessions, activeKey, theme, scrollback, panelWidth, onPanelResize, onSelect, onResume, onWake, onNewSession }: Props = $props();
 
-  // Opening a hibernated session wakes it (once per card); the terminal attaches when it is back.
+  // Opening a hibernated session wakes it once; a failure waits for an explicit retry.
   let wakingKey = $state<string | null>(null);
+  let wakeFailedKey = $state<string | null>(null);
+
+  function wake(session: LiveSessionView): void {
+    wakingKey = session.key;
+    wakeFailedKey = null;
+    void onWake(session).then((woke) => {
+      if (!woke) wakeFailedKey = session.key;
+    });
+  }
+
   $effect(() => {
     const current = active;
-    if (current?.hibernated && wakingKey !== current.key) {
-      wakingKey = current.key;
-      onWake(current);
-    }
+    if (!current) return;
+    if (current.hibernated && wakingKey !== current.key) wake(current);
+    if (!current.hibernated && wakingKey === current.key) wakingKey = null;
   });
 
   const active = $derived(sessions.find((session) => session.key === activeKey) ?? sessions[0]);
@@ -96,6 +105,13 @@
               <pre class="last-words mono">{active.previewLines.join('\n')}</pre>
             {/if}
           </div>
+        {:else if active.hibernated && wakeFailedKey === active.key}
+          <div class="ended">
+            <p>Não foi possível acordar esta sessão. A conversa continua salva.</p>
+            <button type="button" class="button-primary" onclick={() => wake(active)}>
+              <Icon name="history" size={14} />Tentar de novo
+            </button>
+          </div>
         {:else if active.hibernated}
           <div class="ended">
             <p>Sessão hibernada para economizar memória. Acordando com <code class="mono">--resume</code>…</p>
@@ -147,7 +163,7 @@
           </dl>
           <ContextMeter percent={active.contextPercent} />
           <h3>Arquivos</h3>
-          <FileChangeList files={active.files} sessionId={active.sessionId} basePath={active.cwd} visibleCount={12} />
+          <FileChangeList files={active.files} totalCount={active.filesTotal} sessionId={active.sessionId} basePath={active.cwd} visibleCount={12} />
         {:else}
           <ActivityFeed items={activity} basePath={active.cwd} />
         {/if}

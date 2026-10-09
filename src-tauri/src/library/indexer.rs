@@ -59,6 +59,7 @@ pub struct IndexOutcome {
 pub struct Indexer {
     database: Database,
     projects_root: PathBuf,
+    lines_per_commit: usize,
 }
 
 struct TrackedFile {
@@ -68,7 +69,21 @@ struct TrackedFile {
 
 impl Indexer {
     pub fn new(database: Database, projects_root: PathBuf) -> Self {
-        Self { database, projects_root }
+        Self { database, projects_root, lines_per_commit: LINES_PER_COMMIT }
+    }
+
+    /// FSEvents reports resolved paths, so a `~/.claude` reached through a symlink must be compared
+    /// in its canonical form. Called once the folder exists.
+    pub fn use_canonical_root(&mut self) {
+        if let Ok(canonical) = self.projects_root.canonicalize() {
+            self.projects_root = canonical;
+        }
+    }
+
+    /// Smaller chunks exercise the state carried between commits (tests).
+    pub fn with_lines_per_commit(mut self, lines: usize) -> Self {
+        self.lines_per_commit = lines.max(1);
+        self
     }
 
     pub fn projects_root(&self) -> &Path {
@@ -107,7 +122,8 @@ impl Indexer {
             if tracked.identity == identity {
                 return Ok(false);
             }
-            if tracked.identity.inode != identity.inode || identity.size < tracked.cursor.byte_offset {
+            let replaced = tracked.identity.inode != identity.inode || identity.size < tracked.cursor.byte_offset;
+            if replaced || !continues_cleanly(path, tracked.cursor.byte_offset) {
                 self.reset_session(&location.session_id)?;
                 return self.index_session_files(&location).map(|()| true);
             }
@@ -151,7 +167,7 @@ impl Indexer {
         let start = cursor.byte_offset;
         let mut writer = SessionWriter::new(&transaction, source, cursor);
         let mut write_error = None;
-        let read = reader::read_complete_lines(path, start, LINES_PER_COMMIT, |offset, bytes| {
+        let read = reader::read_complete_lines(path, start, self.lines_per_commit, |offset, bytes| {
             if write_error.is_some() {
                 return;
             }
@@ -247,6 +263,15 @@ impl Indexer {
         }
         Ok(missing.len())
     }
+}
+
+/// A file rewritten in place (same inode, now longer) would be resumed mid-line; the byte right
+/// before the saved offset must still be the newline that ended the last line read.
+fn continues_cleanly(path: &Path, byte_offset: u64) -> bool {
+    if byte_offset == 0 {
+        return true;
+    }
+    reader::read_line_at(path, byte_offset - 1, 1).is_ok_and(|byte| byte == b"\n")
 }
 
 fn save_tracked(connection: &Connection, path: &str, location: &TranscriptLocation, identity: FileIdentity, cursor: &FileCursor) -> Result<(), AppError> {

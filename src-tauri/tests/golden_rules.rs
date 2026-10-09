@@ -78,3 +78,15 @@ fn hooks_registry_and_claudegauge_detection_stay_read_only() {
 
     assert_eq!(sandbox.claude_fingerprint(), before, "~/.claude must stay byte-for-byte identical");
 }
+
+#[test]
+fn app_support_reached_through_a_symlink_into_claude_home_is_refused() {
+    let sandbox = SandboxHome::with_read_only_claude_home();
+    let before = sandbox.claude_fingerprint();
+    std::os::unix::fs::symlink(&sandbox.claude_home, sandbox.home.join("link")).unwrap();
+    let sneaky = ccm_lib::paths::AppPaths::new(sandbox.home.clone(), sandbox.claude_home.clone(), sandbox.home.join("link/ccm"));
+    assert!(ccm_lib::build_state(sneaky, std::sync::Arc::new(|_| {})).is_err());
+    let dotted = ccm_lib::paths::AppPaths::new(sandbox.home.clone(), sandbox.claude_home.clone(), sandbox.home.join("x/../.claude/ccm"));
+    assert!(ccm_lib::build_state(dotted, std::sync::Arc::new(|_| {})).is_err());
+    assert_eq!(sandbox.claude_fingerprint(), before);
+}

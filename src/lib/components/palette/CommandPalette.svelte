@@ -43,15 +43,20 @@
     const current = query.trim();
     textMatches = [];
     if (current.length < 3) return;
+    let superseded = false;
     const timer = setTimeout(() => {
       void searchLibrary(current)
         .then((hits) => {
+          if (superseded) return;
           const byId = new Map(history.map((item) => [item.id, item]));
           textMatches = hits.filter((hit) => hit.matchedIn === 'text').flatMap((hit) => byId.get(hit.sessionId) ?? []);
         })
         .catch(() => (textMatches = []));
     }, HISTORY_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      superseded = true;
+      clearTimeout(timer);
+    };
   });
 
   $effect(() => {
@@ -68,7 +73,7 @@
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
       active = (active + step + results.length) % Math.max(results.length, 1);
-      list?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+      list?.querySelector(`[data-index="${active}"]`)?.scrollIntoView?.({ block: 'nearest' });
     } else if (event.key === 'Enter') {
       event.preventDefault();
       choose(results[active]);

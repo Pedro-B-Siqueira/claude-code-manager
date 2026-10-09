@@ -104,6 +104,7 @@ pub async fn worktree_plan(state: State<'_, AppState>, cwd: String, prefix: Stri
 #[tauri::command]
 pub async fn worktree_create(state: State<'_, AppState>, app: AppHandle, cwd: String, prefix: String, name: String) -> Result<LiveSessionView, AppError> {
     let plan = plan(&state, &cwd, &prefix, &name)?;
+    state.paths.ensure_writable(&plan.root)?;
     state.paths.ensure_writable(&plan.path)?;
     std::fs::create_dir_all(&plan.root)?;
     state.git().add_worktree(&plan.repo_root, &plan.path, &plan.branch, &plan.base)?;

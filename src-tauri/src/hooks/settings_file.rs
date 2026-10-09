@@ -40,13 +40,36 @@ pub fn hook_settings(port: u16) -> Value {
     json!({ "hooks": hooks })
 }
 
+const FILE_PREFIX: &str = "claude-settings-";
+
+/// One file per app process (named after its pid), written atomically, so a second running copy
+/// of the app (dev and release side by side) never redirects the other's sessions.
 pub fn write_settings(paths: &AppPaths, port: u16) -> Result<PathBuf, AppError> {
     let directory = paths.app_support().join("hooks");
-    let file = directory.join("claude-settings.json");
+    let file = directory.join(format!("{FILE_PREFIX}{}.json", std::process::id()));
+    let temporary = file.with_extension("json.tmp");
     paths.ensure_writable(&file)?;
     fs::create_dir_all(&directory)?;
-    fs::write(&file, serde_json::to_vec_pretty(&hook_settings(port))?)?;
+    remove_stale_files(&directory);
+    fs::write(&temporary, serde_json::to_vec_pretty(&hook_settings(port))?)?;
+    fs::rename(&temporary, &file)?;
     Ok(file)
+}
+
+/// Files left by app processes that are no longer running.
+fn remove_stale_files(directory: &std::path::Path) {
+    let Ok(entries) = fs::read_dir(directory) else { return };
+    for path in entries.flatten().map(|entry| entry.path()) {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else { continue };
+        let owner = name.strip_prefix(FILE_PREFIX).and_then(|rest| rest.split('.').next()).and_then(|pid| pid.parse::<u32>().ok());
+        let stale = match owner {
+            Some(pid) => pid != std::process::id() && !crate::live::registry::process_alive(pid),
+            None => name == "claude-settings.json",
+        };
+        if stale {
+            let _ = fs::remove_file(&path);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -68,9 +91,32 @@ mod tests {
     }
 
     #[test]
-    fn settings_reference_tokens_only_through_env_vars() {
-        let text = hook_settings(1).to_string();
-        let header_values: Vec<&str> = text.match_indices("X-CCM-Token\":\"").map(|(index, marker)| &text[index + marker.len()..]).collect();
-        assert!(header_values.iter().all(|rest| rest.starts_with("$CCM_HOOK_TOKEN")));
+    fn written_file_never_contains_a_session_token() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_path_buf();
+        let paths = AppPaths::new(home.clone(), home.join(".claude"), home.join("app"));
+        let token = crate::hooks::tokens::TokenRegistry::default().issue("session");
+        let file = write_settings(&paths, 4321).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains(&token));
+        assert!(text.contains("$CCM_HOOK_TOKEN"));
+        assert!(file.file_name().unwrap().to_string_lossy().contains(&std::process::id().to_string()));
+    }
+
+    #[test]
+    fn stale_files_from_dead_instances_are_removed_and_live_ones_kept() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_path_buf();
+        let paths = AppPaths::new(home.clone(), home.join(".claude"), home.join("app"));
+        let directory = paths.app_support().join("hooks");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("claude-settings-999999.json"), "{}").unwrap();
+        fs::write(directory.join("claude-settings.json"), "{}").unwrap();
+        let mine = write_settings(&paths, 1).unwrap();
+        let again = write_settings(&paths, 2).unwrap();
+        assert_eq!(mine, again);
+        let names: Vec<String> = fs::read_dir(&directory).unwrap().flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names, vec![mine.file_name().unwrap().to_string_lossy().into_owned()]);
+        assert!(fs::read_to_string(&again).unwrap().contains("127.0.0.1:2"));
     }
 }

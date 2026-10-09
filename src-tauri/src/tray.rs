@@ -193,6 +193,7 @@ mod tests {
             status_detail: None,
             preview_lines: Vec::new(),
             files: Vec::new(),
+            files_total: 0,
             context_percent: None,
             total_tokens: 0,
             cost_usd: 0.0,

@@ -83,6 +83,7 @@ class DiffPopoverStore {
     this.open = false;
     this.currentKey = null;
     this.edits = [];
+    this.loading = false;
   }
 
   step(delta: number): void {

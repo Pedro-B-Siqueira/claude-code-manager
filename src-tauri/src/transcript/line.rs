@@ -120,6 +120,10 @@ pub struct ParsedLine {
 }
 
 pub fn parse_line(bytes: &[u8]) -> Option<ParsedLine> {
+    // serde would also accept a JSON array and map its items to fields by position.
+    if bytes.trim_ascii_start().first() != Some(&b'{') {
+        return None;
+    }
     let raw: RawLine<'_> = serde_json::from_slice(bytes).ok()?;
     let events = match raw.kind.as_deref() {
         Some("assistant") => assistant_events(&raw),
@@ -249,9 +253,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn malformed_json_is_skipped() {
-        assert!(parse_line(b"{not json").is_none());
-        assert!(parse_line(b"").is_none());
+    fn malformed_json_and_non_object_lines_are_skipped() {
+        for line in [&b"{not json"[..], b"", b"[]", b"\"text\"", b"null", b"123"] {
+            assert!(parse_line(line).is_none(), "{}", String::from_utf8_lossy(line));
+        }
     }
 
     #[test]

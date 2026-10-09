@@ -3,6 +3,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use ccm_lib::error::AppError;
 use ccm_lib::git::{Git, infer_worktree_root};
@@ -82,4 +84,46 @@ fn diff_stat_counts_working_tree_changes() {
     let stat = git.diff_stat(&sandbox.repo).unwrap();
     assert_eq!((stat.added, stat.removed, stat.files.len()), (2, 0, 1));
     assert_eq!(git.current_branch(&sandbox.repo).as_deref(), Some("master"));
+}
+
+#[test]
+fn read_only_queries_leave_the_git_index_untouched() {
+    let sandbox = sandbox();
+    let git = Git::new(PathBuf::from("/usr/bin/git"));
+    thread::sleep(Duration::from_millis(1_100));
+    fs::write(sandbox.repo.join("README.md"), "hello\n").unwrap();
+    let before = fs::read(sandbox.repo.join(".git/index")).unwrap();
+
+    let stat = git.diff_stat(&sandbox.repo).unwrap();
+    assert!(git.is_clean(&sandbox.repo).unwrap());
+    git.current_branch(&sandbox.repo);
+    git.main_repository(&sandbox.repo);
+    git.worktrees(&sandbox.repo).unwrap();
+    git.default_branch(&sandbox.repo);
+
+    assert_eq!(stat.files.len(), 0, "touching a file without changing it is not a change");
+    assert_eq!(fs::read(sandbox.repo.join(".git/index")).unwrap(), before, "the index file must not be rewritten");
+}
+
+#[test]
+fn worktree_operations_never_move_the_main_checkout() {
+    let sandbox = sandbox();
+    let git = Git::new(PathBuf::from("git"));
+    fs::write(sandbox.repo.join("wip.txt"), "work in progress\n").unwrap();
+    let status_before = git_output(&sandbox.repo, &["status", "--porcelain"]);
+    let head_before = git_output(&sandbox.repo, &["rev-parse", "HEAD"]);
+
+    let path = sandbox.worktrees.join("app-feature");
+    git.add_worktree(&sandbox.repo, &path, "feat-feature", "master").unwrap();
+    git.remove_worktree(&sandbox.repo, &path).unwrap();
+
+    assert_eq!(git.current_branch(&sandbox.repo).as_deref(), Some("master"));
+    assert_eq!(git_output(&sandbox.repo, &["rev-parse", "HEAD"]), head_before);
+    assert_eq!(git_output(&sandbox.repo, &["status", "--porcelain"]), status_before);
+    assert_eq!(git_output(&sandbox.repo, &["stash", "list"]), "");
+}
+
+fn git_output(directory: &Path, args: &[&str]) -> String {
+    let output = Command::new("git").arg("-C").arg(directory).args(args).output().unwrap();
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }

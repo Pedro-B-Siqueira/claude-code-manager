@@ -2,6 +2,8 @@
 //! port and accepts only requests carrying a session key and its token.
 
 use std::io::Read;
+use std::net::SocketAddr;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::thread;
 
@@ -24,23 +26,30 @@ pub struct HookEvent {
 pub type HookHandler = Arc<dyn Fn(HookEvent) + Send + Sync>;
 
 pub struct HookServer {
-    port: u16,
+    address: SocketAddr,
 }
 
 impl HookServer {
     pub fn start(tokens: Arc<TokenRegistry>, handler: HookHandler) -> std::io::Result<Self> {
         let server = Server::http("127.0.0.1:0").map_err(std::io::Error::other)?;
-        let port = server.server_addr().to_ip().map(|address| address.port()).ok_or_else(|| std::io::Error::other("endereço sem porta"))?;
+        let address = server.server_addr().to_ip().ok_or_else(|| std::io::Error::other("endereço sem porta"))?;
         thread::Builder::new().name("hook-server".to_owned()).spawn(move || {
             for request in server.incoming_requests() {
-                handle(request, &tokens, &handler);
+                // A bug in one event must not stop the server (or the app) from handling the next.
+                if catch_unwind(AssertUnwindSafe(|| handle(request, &tokens, &handler))).is_err() {
+                    log::error!("falha inesperada ao tratar um hook; o servidor segue ativo");
+                }
             }
         })?;
-        Ok(Self { port })
+        Ok(Self { address })
     }
 
     pub fn port(&self) -> u16 {
-        self.port
+        self.address.port()
+    }
+
+    pub fn address(&self) -> SocketAddr {
+        self.address
     }
 }
 

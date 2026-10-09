@@ -83,7 +83,7 @@
 
   <TerminalPreview lines={session.previewLines} />
 
-  <FileChangeList files={session.files} sessionId={session.sessionId} basePath={session.cwd} />
+  <FileChangeList files={session.files} totalCount={session.filesTotal} sessionId={session.sessionId} basePath={session.cwd} />
 
   <ContextMeter percent={session.contextPercent} />
 
