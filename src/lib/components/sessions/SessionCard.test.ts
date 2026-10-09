@@ -39,11 +39,32 @@ describe('SessionCard', () => {
     expect(container.querySelector('.meter')).toHaveClass('high');
   });
 
-  it('calls onFocus with the session key', async () => {
+  it('opens the session when the card is clicked anywhere but its controls', async () => {
     const onFocus = vi.fn();
     render(SessionCard, { session: mockSession(0), onFocus });
-    await fireEvent.click(screen.getByRole('button', { name: /Focar/ }));
+    expect(screen.queryByRole('button', { name: /Focar/ })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByText('feat-orders-pagination'));
+    expect(onFocus).toHaveBeenCalledOnce();
     expect(onFocus).toHaveBeenCalledWith('mock-1');
+    await fireEvent.click(screen.getByRole('button', { name: 'Abrir no VS Code' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Mais ações' }));
+    expect(onFocus).toHaveBeenCalledOnce();
+  });
+
+  it('opens the session from the keyboard through the title, once', async () => {
+    const onFocus = vi.fn();
+    render(SessionCard, { session: mockSession(0), onFocus });
+    await fireEvent.click(screen.getByRole('button', { name: 'Paginação na listagem de pedidos' }));
+    expect(onFocus).toHaveBeenCalledOnce();
+  });
+
+  it('does not open the session after the card was dragged', async () => {
+    const onFocus = vi.fn();
+    render(SessionCard, { session: mockSession(0), onFocus });
+    const repo = screen.getByText('feat-orders-pagination');
+    await fireEvent.mouseDown(repo, { clientX: 10, clientY: 10 });
+    await fireEvent.click(repo, { clientX: 60, clientY: 14 });
+    expect(onFocus).not.toHaveBeenCalled();
   });
 
   it('counts every touched file, not only the ones listed on the card', () => {

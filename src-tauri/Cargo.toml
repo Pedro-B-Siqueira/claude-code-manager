@@ -4,7 +4,7 @@ resolver = "3"
 
 [package]
 name = "claude-code-manager"
-version = "0.1.0"
+version = "0.1.1"
 description = "Gerenciador leve de sessoes do Claude Code"
 edition = "2024"
 rust-version = "1.85"

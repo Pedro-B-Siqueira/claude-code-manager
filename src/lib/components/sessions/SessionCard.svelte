@@ -2,6 +2,7 @@
   import type { LiveSessionView } from '../../api/types';
   import { formatMemory, formatTokens } from '../../format';
   import { openInFinder, openInVsCode, openPr } from '../../sessions/actions';
+  import { cardClickFocuses, isInteractiveTarget } from '../../sessions/card-click';
   import { gitStatusStore } from '../../stores/git-status.svelte';
   import Icon from '../common/Icon.svelte';
   import CardMenu, { type MenuAction } from './CardMenu.svelte';
@@ -47,9 +48,23 @@
   $effect(() => {
     gitStatusStore.refresh(session.cwd);
   });
+
+  let pressedAt: { x: number; y: number } | null = null;
+
+  function rememberPress(event: MouseEvent): void {
+    pressedAt = { x: event.clientX, y: event.clientY };
+  }
+
+  function focusFromCard(event: MouseEvent): void {
+    const travel = pressedAt ? Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) : 0;
+    pressedAt = null;
+    const hasSelection = (window.getSelection()?.toString() ?? '') !== '';
+    if (cardClickFocuses({ fromInteractive: isInteractiveTarget(event.target), pointerTravel: travel, hasSelection })) onFocus(session.key);
+  }
 </script>
 
-<article class="card" class:hibernated={session.hibernated} aria-label={session.title}>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions (the title button is the keyboard path; the whole card is a larger mouse target) -->
+<article class="card" class:hibernated={session.hibernated} aria-label={session.title} onmousedown={rememberPress} onclick={focusFromCard}>
   <header class="head">
     <StatusBadge status={session.status} hibernated={session.hibernated} />
     {#if session.origin === 'external'}
@@ -65,7 +80,7 @@
     </span>
   </header>
 
-  <h3 class="title">{session.title}</h3>
+  <h3 class="title"><button type="button" class="title-button" onclick={() => onFocus(session.key)}>{session.title}</button></h3>
 
   <div class="meta">
     <span class="repo">{session.repo}</span>
@@ -112,9 +127,6 @@
       <button type="button" class="icon-button" aria-label="Abrir no Finder" title="Abrir no Finder" onclick={() => void openInFinder(session.cwd)}>
         <Icon name="folder" />
       </button>
-      <button type="button" class="focus-button" onclick={() => onFocus(session.key)}>
-        <Icon name="focus" size={14} />Focar
-      </button>
     </span>
   </footer>
 </article>
@@ -123,6 +135,7 @@
   .card {
     display: flex;
     flex-direction: column;
+    cursor: pointer;
     gap: 10px;
     padding: 14px 14px 12px;
     border: 1px solid var(--border);
@@ -167,9 +180,27 @@
     font-size: 14px;
     font-weight: 600;
     line-height: 1.3;
+  }
+
+  .title-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .title-button:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .meta {
@@ -270,8 +301,7 @@
     gap: 2px;
   }
 
-  .icon-button,
-  .focus-button {
+  .icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -291,16 +321,7 @@
     width: 28px;
   }
 
-  .focus-button {
-    padding: 0 10px;
-    color: var(--text);
-    background: var(--surface-2);
-    font-size: 12px;
-    font-weight: 550;
-  }
-
-  .icon-button:hover,
-  .focus-button:hover {
+  .icon-button:hover {
     background: var(--surface-2);
     color: var(--text);
   }

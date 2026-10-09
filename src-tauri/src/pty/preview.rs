@@ -55,9 +55,11 @@ fn prompt_box_start(lines: &[&str]) -> Option<usize> {
         .map(|pair| pair[0])
 }
 
+/// Mostly `─`: Claude Code may write a label into the border (Ink's `borderText`).
 fn is_rule(line: &str) -> bool {
-    let trimmed = line.trim();
-    trimmed.chars().count() >= MIN_RULE_WIDTH && trimmed.chars().all(|character| character == '─')
+    let visible = line.chars().filter(|character| !character.is_whitespace()).count();
+    let dashes = line.chars().filter(|character| *character == '─').count();
+    dashes >= MIN_RULE_WIDTH && dashes * 2 >= visible
 }
 
 fn is_prompt(line: &str) -> bool {
@@ -136,6 +138,18 @@ mod tests {
             screen.preview_lines(),
             vec!["\u{23fa} Update(src/orders/table.tsx)", "  \u{23bf} Updated with 12 additions", "", "\u{273b} Working\u{2026} (esc to interrupt)"]
         );
+    }
+
+    /// Claude Code can write a label into the prompt box border (Ink's `borderText`), at either end.
+    #[test]
+    fn finds_the_prompt_box_when_its_border_carries_a_label() {
+        let rule = "\u{2500}".repeat(60);
+        for top in [format!("{} Projetos (meta outubro) \u{2500}\u{2500}", "\u{2500}".repeat(35)), format!("Projetos {}", "\u{2500}".repeat(51))] {
+            let mut screen = TerminalScreen::new(10, 60);
+            let text = format!("\u{23fa} Update(src/a.ts)\r\n  \u{23bf} Updated\r\n\r\n{top}\r\n\u{276f} \r\n{rule}\r\n  \u{25b8}\u{25b8} auto mode on");
+            screen.process(text.as_bytes());
+            assert_eq!(screen.preview_lines(), vec!["\u{23fa} Update(src/a.ts)", "  \u{23bf} Updated"], "top border: {top}");
+        }
     }
 
     #[test]

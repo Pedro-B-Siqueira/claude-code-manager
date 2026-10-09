@@ -26,7 +26,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ## O que ele faz
 
-**Sessões em grade.** Cada card mostra status, repositório, branch, o que o Claude está fazendo no terminal, os arquivos alterados (+/−), o quanto da janela de contexto já foi usado, os tokens que o Claude escreveu e a memória. Os filtros separam as que precisam de você das que estão trabalhando ou já terminaram, e os cards podem ser reordenados arrastando.
+**Sessões em grade.** Cada card mostra status, repositório, branch, o que o Claude está fazendo no terminal, os arquivos alterados (+/−), o quanto da janela de contexto já foi usado, os tokens que o Claude escreveu e a memória. Os filtros separam as que precisam de você das que estão trabalhando ou já terminaram, e os cards podem ser reordenados arrastando. Clicar num card abre a sessão no modo foco.
 
 **Por que mudou isso?** Ao passar o mouse (ou focar com o teclado) num arquivo, aparece o diff daquela edição e o texto que o assistente escreveu logo antes de fazê-la. Tudo é lido do transcript local.
 
