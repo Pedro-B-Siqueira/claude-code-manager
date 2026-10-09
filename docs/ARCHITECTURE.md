@@ -20,6 +20,7 @@ Este documento descreve como o Claude Code Manager é organizado: estrutura de p
 | Hibernação | Ligada por padrão, depois de 30 min de ociosidade. Sessões em Trabalhando ou Pedindo permissão nunca hibernam. O card mostra a memória (RSS) do processo `claude`. |
 | Cota de uso | Fora do escopo. O app não lê token OAuth nem acessa o Keychain. O custo equivalente por sessão é calculado localmente a partir do `usage` dos transcripts. |
 | Terminal na grade | Os cards mostram uma prévia em texto gerada no backend. O xterm.js só é montado na sessão em foco. |
+| Fechar a janela | Esconde a janela; o app segue na barra de menus com as sessões rodando. ⌘Q ou "Sair" encerram, com confirmação se alguma sessão estiver trabalhando. Clicar no ícone do Dock reabre a janela. |
 
 ## Formatos do Claude Code
 
@@ -114,7 +115,7 @@ claude-code-manager/
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
-| `notifications.rs` · `tray.rs` | Notificações de sistema e ícone na barra de menus |
+| `tray.rs` | Ícone template na barra de menus (desenhado em código), título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |
 | `commands/` | Handlers finos por domínio |
 
 ### Status das sessões

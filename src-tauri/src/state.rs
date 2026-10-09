@@ -11,6 +11,7 @@ use crate::paths::AppPaths;
 use crate::pty::PtyManager;
 use crate::shell_env::ShellEnvironment;
 use crate::status::StatusTracker;
+use crate::tray::TrayUpdater;
 
 pub struct AppState {
     pub paths: AppPaths,
@@ -24,6 +25,7 @@ pub struct AppState {
     pub hook_settings_file: OnceLock<PathBuf>,
     pub status: StatusTracker,
     pub notifications: NotificationCenter,
+    pub tray: OnceLock<TrayUpdater>,
 }
 
 impl AppState {

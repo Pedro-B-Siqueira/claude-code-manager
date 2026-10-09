@@ -2,7 +2,7 @@
 
 Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos. Não é uma IDE: serve para acompanhar várias sessões ao mesmo tempo, ver o que cada uma alterou e retomar sessões antigas.
 
-> **Status:** etapa 6 de 10 (git: diffstat, VS Code, Finder, PR e worktrees). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Status:** etapa 7 de 10 (ícone na barra de menus com a contagem e a lista rápida). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Garantias
 
@@ -35,6 +35,8 @@ npm install
 | `npm test` | Testes Rust (`cargo test --workspace`), checagem de tipos (`svelte-check`) e testes do frontend (`vitest`). |
 | `npm run check` | Só a checagem de tipos do frontend. |
 | `cargo run --release --example index_benchmark -- <projects> <db>` | Mede a indexação de um diretório de transcripts num banco descartável (em `src-tauri/`). |
+
+Fechar a janela (botão vermelho) só a esconde: as sessões continuam rodando e o ícone na barra de menus mostra quantas precisam de você. Para sair de verdade, use ⌘Q ou "Sair" no menu do ícone; se alguma sessão estiver trabalhando, o app pede confirmação. Os terminais são encerrados e as conversas continuam retomáveis.
 
 O build é local e não é assinado nem notarizado. Na primeira abertura do `.app`, use botão direito → **Abrir**.
 

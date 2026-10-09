@@ -34,3 +34,7 @@ export function onSessionExited(handler: (payload: ExitPayload) => void): Promis
 export function onCloseRequested(handler: (runningSessions: number) => void): Promise<UnlistenFn> {
   return listen<number>('app:close-requested', (event) => handler(event.payload));
 }
+
+export function onTrayFocusSession(handler: (key: string) => void): Promise<UnlistenFn> {
+  return listen<string>('tray:focus-session', (event) => handler(event.payload));
+}

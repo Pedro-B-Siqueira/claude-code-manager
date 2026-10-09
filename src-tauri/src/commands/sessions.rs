@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use tauri::ipc::{Channel, Response};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::claudegauge::ClaudeGaugeStatus;
 use crate::error::AppError;
@@ -53,9 +53,7 @@ fn find_view(state: &AppState, key: &str) -> Result<LiveSessionView, AppError> {
 }
 
 pub fn notify_live_changed(app: &AppHandle) {
-    if let Err(error) = app.emit("live:changed", ()) {
-        log::warn!("falha ao notificar a interface: {error}");
-    }
+    crate::notify_live_changed(app);
 }
 
 #[tauri::command]

@@ -7,7 +7,7 @@
   import ViewToggle from './lib/components/layout/ViewToggle.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { quitApp, takeNotifiedSession } from './lib/api/commands';
-  import { onCloseRequested } from './lib/api/events';
+  import { onCloseRequested, onTrayFocusSession } from './lib/api/events';
   import type { LiveSessionView } from './lib/api/types';
   import ConfirmDialog from './lib/components/dialogs/ConfirmDialog.svelte';
   import NewSessionDialog from './lib/components/dialogs/NewSessionDialog.svelte';
@@ -27,6 +27,7 @@
     void liveSessionsStore.start();
     void appInfoStore.refresh();
     void onCloseRequested((runningSessions) => (uiStore.confirmation = { kind: 'quit', runningSessions }));
+    void onTrayFocusSession((key) => uiStore.focusSession(key));
     void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) void openNotifiedSession();
     });

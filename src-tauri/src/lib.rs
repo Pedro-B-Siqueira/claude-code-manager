@@ -17,6 +17,7 @@ pub mod shell_env;
 pub mod state;
 pub mod status;
 pub mod transcript;
+pub mod tray;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -53,7 +54,18 @@ pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppStat
         hook_settings_file: OnceLock::new(),
         status: StatusTracker::default(),
         notifications: NotificationCenter::default(),
+        tray: OnceLock::new(),
     })
+}
+
+/// The live list changed: refresh the UI and the menu bar.
+pub fn notify_live_changed(app: &AppHandle) {
+    emit_or_log(app, "live:changed", ());
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Some(tray) = state.tray.get() {
+            tray.schedule();
+        }
+    }
 }
 
 fn emit_or_log<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: S) {
@@ -90,7 +102,7 @@ fn pty_notifier(app: AppHandle) -> PtyNotifier {
             if let Some(state) = app.try_state::<AppState>() {
                 state.hook_tokens.revoke(&key);
             }
-            emit_or_log(&app, "live:changed", ());
+            notify_live_changed(&app);
             emit_or_log(&app, "session:exited", ExitPayload { key, code });
         }
     })
@@ -102,7 +114,7 @@ fn hook_handler(app: AppHandle) -> HookHandler {
         let Some(update) = status::status_for_hook(&event.payload) else { return };
         let Some(transition) = state.status.apply(&event.session_key, update, now_ms()) else { return };
         emit_or_log(&app, "session:status", transition.clone());
-        emit_or_log(&app, "live:changed", ());
+        notify_live_changed(&app);
         announce(&app, &state, &transition);
     })
 }
@@ -156,8 +168,20 @@ fn needs_quit_confirmation(app: &AppHandle) -> bool {
     if busy == 0 {
         return false;
     }
+    tray::show_main_window(app);
     emit_or_log(app, "app:close-requested", busy);
     true
+}
+
+/// "Sair" from the menu bar: same confirmation as ⌘Q when something is still working.
+fn request_quit(app: &AppHandle) {
+    if needs_quit_confirmation(app) {
+        return;
+    }
+    let state = app.state::<AppState>();
+    state.quit_confirmed.store(true, Ordering::SeqCst);
+    state.pty.shutdown_all(Duration::from_secs(3));
+    app.exit(0);
 }
 
 fn log_plugin(paths: &AppPaths) -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -175,8 +199,15 @@ fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error
     service::start(&state.paths, state.library_progress.clone(), library_notifier(handle.clone()))?;
     start_hooks(&handle, &state);
     let registry_notifier = handle.clone();
-    live::watcher::start(state.paths.claude_home(), Arc::new(move || emit_or_log(&registry_notifier, "live:changed", ())));
+    live::watcher::start(state.paths.claude_home(), Arc::new(move || notify_live_changed(&registry_notifier)));
     app.manage(state);
+    match tray::install(&handle, request_quit) {
+        Ok(updater) => {
+            updater.schedule();
+            let _ = handle.state::<AppState>().tray.set(updater);
+        }
+        Err(error) => log::warn!("ícone da barra de menus indisponível: {error}"),
+    }
     std::thread::spawn(move || {
         handle.state::<AppState>().shell();
     });
@@ -197,10 +228,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| setup(app, paths))
         .on_window_event(|window, event| {
+            // Closing the window keeps the app (and its sessions) running in the menu bar.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if needs_quit_confirmation(window.app_handle()) {
-                    api.prevent_close();
-                }
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -249,6 +280,7 @@ pub fn run() {
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, .. } if needs_quit_confirmation(app) => api.prevent_exit(),
             RunEvent::Exit => app.state::<AppState>().pty.shutdown_all(Duration::from_secs(2)),
+            RunEvent::Reopen { .. } => tray::show_main_window(app),
             _ => {}
         });
 }
