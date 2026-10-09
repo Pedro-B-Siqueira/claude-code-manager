@@ -1,5 +1,15 @@
 import { invoke, type Channel } from '@tauri-apps/api/core';
-import type { AppInfo, AppSettings, IndexProgress, LiveSessionView, SearchHit, SessionListItem, SessionSummary } from './types';
+import type {
+  ActivityItem,
+  AppInfo,
+  AppSettings,
+  EditDetail,
+  IndexProgress,
+  LiveSessionView,
+  SearchHit,
+  SessionListItem,
+  SessionSummary,
+} from './types';
 
 export function fetchSettings(): Promise<AppSettings> {
   return invoke<AppSettings>('settings_get');
@@ -97,4 +107,16 @@ export function fetchAppInfo(): Promise<AppInfo> {
 
 export function takeNotifiedSession(): Promise<string | null> {
   return invoke<string | null>('take_notified_session');
+}
+
+export function fetchFileEdits(sessionId: string, filePath: string): Promise<EditDetail[]> {
+  return invoke<EditDetail[]>('library_file_edits', { sessionId, filePath });
+}
+
+export function fetchEdit(editId: number): Promise<EditDetail | null> {
+  return invoke<EditDetail | null>('library_edit', { editId });
+}
+
+export function fetchActivity(sessionId: string, limit: number): Promise<ActivityItem[]> {
+  return invoke<ActivityItem[]>('library_activity', { sessionId, limit });
 }

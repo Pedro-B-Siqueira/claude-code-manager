@@ -145,7 +145,7 @@ claude-code-manager/
 - **Biblioteca:** `library_list`, `library_search`, `library_summary`, `library_rename`, `library_pin`, `library_set_tags`, `library_set_category`, `library_tags`, `library_categories`, `library_status`.
 - **Sessões vivas:** `live_list`, `live_session(key)`, `session_new({cwd})`, `session_resume(id)` (reaproveita a sessão se já estiver aberta), `session_close(key)` (encerra o grupo de processos ou remove da grade se já terminou), `recent_dirs`, `app_quit`.
 - **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
-- **Detalhes:** `session_files`, `session_activity`, `edit_detail(editId)`. O diff é carregado sob demanda, relido do transcript pelo offset da linha.
+- **Detalhes:** `library_file_edits(sessionId, filePath)` (últimas edições do arquivo, cada uma com "Por quê" e diff), `library_edit(editId)` e `library_activity(sessionId, limit)`. O diff é montado sob demanda a partir de `old_string`/`new_string` (ou `content`, para um Write), relidos do transcript pelo offset da linha; diff de linhas por LCS com 3 linhas de contexto.
 - **Git:** `git_status`, `worktree_list`, `worktree_create`, `worktree_remove`, `open_vscode`, `open_finder`, `open_pr`.
 - **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 

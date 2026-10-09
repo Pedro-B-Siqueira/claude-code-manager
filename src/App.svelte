@@ -12,6 +12,7 @@
   import ConfirmDialog from './lib/components/dialogs/ConfirmDialog.svelte';
   import NewSessionDialog from './lib/components/dialogs/NewSessionDialog.svelte';
   import ResumeModal from './lib/components/library/ResumeModal.svelte';
+  import DiffPopover from './lib/components/sessions/DiffPopover.svelte';
   import SessionGrid from './lib/components/sessions/SessionGrid.svelte';
   import { appInfoStore } from './lib/stores/app-info.svelte';
   import { libraryStore } from './lib/stores/library.svelte';
@@ -124,6 +125,8 @@
     </main>
   </div>
 </div>
+
+<DiffPopover />
 
 {#if uiStore.resumeOpen}
   <ResumeModal onClose={() => (uiStore.resumeOpen = false)} onResume={(sessionId) => void resumeById(sessionId)} />

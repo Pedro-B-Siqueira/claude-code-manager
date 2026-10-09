@@ -1,6 +1,10 @@
 <script lang="ts">
-  import type { LiveSessionView, Theme } from '../../api/types';
-  import { formatCost, formatTokens } from '../../format';
+  import { fetchActivity } from '../../api/commands';
+  import { onLibraryChanged } from '../../api/events';
+  import { reportWarning, type FailureCause } from '../../api/logger';
+  import type { ActivityItem, LiveSessionView, Theme } from '../../api/types';
+  import { formatCost, formatMemory, formatTokens } from '../../format';
+  import ActivityFeed from '../sessions/ActivityFeed.svelte';
   import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
   import FileChangeList from '../sessions/FileChangeList.svelte';
@@ -20,6 +24,27 @@
   let { sessions, activeKey, theme, scrollback, onSelect, onResume, onNewSession }: Props = $props();
 
   const active = $derived(sessions.find((session) => session.key === activeKey) ?? sessions[0]);
+
+  const ACTIVITY_LIMIT = 200;
+  type PanelTab = 'summary' | 'activity';
+  let panelTab = $state<PanelTab>('summary');
+  let activity = $state<ActivityItem[]>([]);
+
+  async function loadActivity(sessionId: string): Promise<void> {
+    const items = await fetchActivity(sessionId, ACTIVITY_LIMIT).catch((cause: FailureCause) => {
+      reportWarning('falha ao carregar a atividade', cause);
+      return [];
+    });
+    if (active?.sessionId === sessionId) activity = items;
+  }
+
+  $effect(() => {
+    const sessionId = active?.sessionId;
+    if (panelTab !== 'activity' || !sessionId) return;
+    void loadActivity(sessionId);
+    const unlisten = onLibraryChanged(() => void loadActivity(sessionId));
+    return () => void unlisten.then((stop) => stop());
+  });
 </script>
 
 {#if !active}
@@ -71,21 +96,33 @@
       </section>
 
       <aside class="panel">
-        <StatusBadge status={active.status} hibernated={active.hibernated} />
-        <h3>Resumo</h3>
-        <dl>
-          <dt>Repositório</dt>
-          <dd>{active.repo}</dd>
-          <dt>Branch</dt>
-          <dd class="mono">{active.branch ?? '—'}</dd>
-          <dt>Pasta</dt>
-          <dd class="mono">{active.cwd}</dd>
-          <dt>Tokens</dt>
-          <dd class="mono">{formatTokens(active.totalTokens)} · {formatCost(active.costUsd)}</dd>
-        </dl>
-        <ContextMeter percent={active.contextPercent} />
-        <h3>Arquivos</h3>
-        <FileChangeList files={active.files} visibleCount={8} />
+        <div class="panel-tabs" role="tablist" aria-label="Painel da sessão">
+          <button type="button" role="tab" aria-selected={panelTab === 'summary'} class:active={panelTab === 'summary'} onclick={() => (panelTab = 'summary')}>Resumo</button>
+          <button type="button" role="tab" aria-selected={panelTab === 'activity'} class:active={panelTab === 'activity'} onclick={() => (panelTab = 'activity')}>Atividade</button>
+        </div>
+        {#if panelTab === 'summary'}
+          <StatusBadge status={active.status} hibernated={active.hibernated} />
+          {#if active.statusDetail}<p class="detail mono">{active.statusDetail}</p>{/if}
+          <dl>
+            <dt>Repositório</dt>
+            <dd>{active.repo}</dd>
+            <dt>Branch</dt>
+            <dd class="mono">{active.branch ?? '—'}</dd>
+            <dt>Pasta</dt>
+            <dd class="mono">{active.cwd}</dd>
+            <dt>Tokens</dt>
+            <dd class="mono">{formatTokens(active.totalTokens)} · {formatCost(active.costUsd)}</dd>
+            {#if active.memoryMb !== null}
+              <dt>Memória</dt>
+              <dd class="mono">{formatMemory(active.memoryMb)}</dd>
+            {/if}
+          </dl>
+          <ContextMeter percent={active.contextPercent} />
+          <h3>Arquivos</h3>
+          <FileChangeList files={active.files} sessionId={active.sessionId} basePath={active.cwd} visibleCount={12} />
+        {:else}
+          <ActivityFeed items={activity} basePath={active.cwd} />
+        {/if}
       </aside>
     </div>
   </div>
@@ -222,6 +259,42 @@
     border-radius: var(--radius-card);
     background: var(--surface);
     overflow-y: auto;
+  }
+
+  .panel-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-button);
+    background: var(--bg);
+  }
+
+  .panel-tabs button {
+    flex: 1;
+    height: 26px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+
+  .panel-tabs button.active {
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 550;
+  }
+
+  .detail {
+    margin: 0;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--amber) var(--status-badge-alpha), transparent);
+    color: var(--amber);
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
   }
 
   h3 {

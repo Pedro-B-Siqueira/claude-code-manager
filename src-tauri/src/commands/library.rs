@@ -1,6 +1,7 @@
 use tauri::State;
 
 use crate::error::AppError;
+use crate::library::details::{self, ActivityItem, EditDetail};
 use crate::library::models::{IndexProgress, SearchHit, SessionListItem, SessionSummary};
 use crate::library::queries;
 use crate::state::AppState;
@@ -68,4 +69,23 @@ pub async fn library_categories(state: State<'_, AppState>) -> Result<Vec<String
 #[tauri::command]
 pub async fn library_status(state: State<'_, AppState>) -> Result<IndexProgress, AppError> {
     Ok(state.library_progress.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone())
+}
+
+#[tauri::command]
+pub async fn library_file_edits(
+    state: State<'_, AppState>,
+    session_id: String,
+    file_path: String,
+) -> Result<Vec<EditDetail>, AppError> {
+    details::file_edits(&state.database.connection(), &session_id, &file_path)
+}
+
+#[tauri::command]
+pub async fn library_edit(state: State<'_, AppState>, edit_id: i64) -> Result<Option<EditDetail>, AppError> {
+    details::edit_by_id(&state.database.connection(), edit_id)
+}
+
+#[tauri::command]
+pub async fn library_activity(state: State<'_, AppState>, session_id: String, limit: u32) -> Result<Vec<ActivityItem>, AppError> {
+    details::activity(&state.database.connection(), &session_id, limit.min(500))
 }

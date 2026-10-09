@@ -131,3 +131,35 @@ export interface IndexProgress {
   filesDone: number;
   filesTotal: number;
 }
+
+export type DiffLineKind = 'context' | 'added' | 'removed' | 'gap';
+
+export interface DiffLine {
+  kind: DiffLineKind;
+  text: string;
+}
+
+export interface EditDetail {
+  id: number;
+  tool: string;
+  filePath: string;
+  timestamp: number | null;
+  newStart: number | null;
+  newEnd: number | null;
+  added: number;
+  removed: number;
+  isNewFile: boolean;
+  why: string | null;
+  lines: DiffLine[];
+  truncated: boolean;
+}
+
+export interface ActivityItem {
+  id: number;
+  timestamp: number | null;
+  kind: string;
+  tool: string | null;
+  target: string | null;
+  editId: number | null;
+  fromSubagent: boolean;
+}

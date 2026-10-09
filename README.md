@@ -2,7 +2,7 @@
 
 Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos. Não é uma IDE: serve para acompanhar várias sessões ao mesmo tempo, ver o que cada uma alterou e retomar sessões antigas.
 
-> **Status:** etapa 4 de 10 (status em tempo real por hooks, sessões externas e notificações). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Status:** etapa 5 de 10 (cards e Foco: hover de diff, atividade, contexto, tokens, custo e memória). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Garantias
 

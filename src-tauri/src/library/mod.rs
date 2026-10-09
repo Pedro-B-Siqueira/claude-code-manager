@@ -1,3 +1,5 @@
+pub mod details;
+pub mod diff;
 pub mod indexer;
 pub mod models;
 pub mod project;

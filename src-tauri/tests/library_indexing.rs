@@ -205,3 +205,51 @@ fn ignores_files_outside_the_known_layout() {
     fs::write(stray, "{}\n").unwrap();
     assert!(!workspace.indexer().index_file(stray).unwrap());
 }
+
+#[test]
+fn edit_details_rebuild_the_diff_from_the_transcript_line() {
+    use ccm_lib::library::details;
+    use ccm_lib::library::diff::DiffLineKind;
+
+    let workspace = Workspace::new();
+    fixtures::install_demo_session(&workspace.projects);
+    workspace.index_everything();
+    let database = workspace.reader();
+    let connection = database.connection();
+
+    let hook = "/tmp/ccm-fixture/demo-app/src/orders/use-orders.ts";
+    let edits = details::file_edits(&connection, DEMO_SESSION_ID, hook).unwrap();
+    assert_eq!(edits.len(), 1);
+    let edit = &edits[0];
+    assert_eq!(edit.why.as_deref(), Some("Vou adicionar a paginação no hook de pedidos."));
+    assert_eq!((edit.new_start, edit.new_end), (Some(20), Some(25)));
+    let removed: Vec<&str> = edit.lines.iter().filter(|line| line.kind == DiffLineKind::Removed).map(|line| line.text.as_str()).collect();
+    let added: Vec<&str> = edit.lines.iter().filter(|line| line.kind == DiffLineKind::Added).map(|line| line.text.as_str()).collect();
+    assert_eq!(removed, vec!["const page = 1;"]);
+    assert_eq!(added, vec!["const page = params.page;", "const size = 20;", "const offset = page * size;"]);
+
+    let spec = details::file_edits(&connection, DEMO_SESSION_ID, "/tmp/ccm-fixture/demo-app/src/orders/use-orders.spec.ts").unwrap();
+    assert!(spec[0].is_new_file);
+    assert!(spec[0].lines.iter().all(|line| line.kind == DiffLineKind::Added));
+    assert_eq!(details::edit_by_id(&connection, edit.id).unwrap().map(|detail| detail.lines.len()), Some(edit.lines.len()));
+
+    let subagent = details::file_edits(&connection, DEMO_SESSION_ID, "/tmp/ccm-fixture/demo-app/src/orders/guards.ts").unwrap();
+    assert_eq!(subagent[0].lines.iter().filter(|line| line.kind == DiffLineKind::Added).count(), 3);
+}
+
+#[test]
+fn activity_feed_lists_prompts_tools_and_edits_newest_first() {
+    use ccm_lib::library::details;
+
+    let workspace = Workspace::new();
+    fixtures::install_demo_session(&workspace.projects);
+    workspace.index_everything();
+    let database = workspace.reader();
+    let activity = details::activity(&database.connection(), DEMO_SESSION_ID, 50).unwrap();
+    let kinds: Vec<(&str, Option<&str>)> = activity.iter().map(|item| (item.kind.as_str(), item.target.as_deref())).collect();
+    assert!(kinds.contains(&("prompt", Some("Adicione paginação na listagem de pedidos"))));
+    assert!(kinds.contains(&("tool", Some("npm test -- orders"))));
+    assert!(activity.iter().any(|item| item.kind == "edit" && item.edit_id.is_some()));
+    assert!(activity.iter().any(|item| item.from_subagent));
+    assert!(activity.windows(2).all(|pair| pair[0].id > pair[1].id));
+}

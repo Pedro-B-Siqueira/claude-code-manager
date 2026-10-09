@@ -1,16 +1,23 @@
 <script lang="ts">
   import type { FileChangeSummary } from '../../api/types';
   import { fileName } from '../../format';
+  import { diffHover, type DiffRequest } from '../../stores/diff-popover.svelte';
 
   interface Props {
     files: FileChangeSummary[];
+    sessionId?: string | null;
+    basePath?: string | null;
     visibleCount?: number;
   }
 
-  let { files, visibleCount = 3 }: Props = $props();
+  let { files, sessionId = null, basePath = null, visibleCount = 3 }: Props = $props();
 
   const visibleFiles = $derived(files.slice(0, visibleCount));
   const hiddenCount = $derived(Math.max(0, files.length - visibleCount));
+
+  function diffRequest(path: string): DiffRequest | null {
+    return sessionId ? { kind: 'file', sessionId, filePath: path, basePath } : null;
+  }
 </script>
 
 {#if files.length === 0}
@@ -19,7 +26,13 @@
   <ul class="files">
     {#each visibleFiles as file (file.path)}
       <li>
-        <button type="button" class="file" title={file.path}>
+        <button
+          type="button"
+          class="file"
+          title={file.path}
+          aria-label={`${fileName(file.path)}: +${file.added} −${file.removed}${sessionId ? '. Passe o mouse ou foque para ver o diff' : ''}`}
+          use:diffHover={diffRequest(file.path)}
+        >
           <span class="name mono">{fileName(file.path)}</span>
           <span class="delta mono">
             <span class="added">+{file.added}</span>
@@ -58,7 +71,8 @@
     cursor: default;
   }
 
-  .file:hover {
+  .file:hover,
+  .file:focus-visible {
     background: var(--surface-2);
   }
 
