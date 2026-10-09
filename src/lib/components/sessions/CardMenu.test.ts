@@ -35,3 +35,15 @@ describe('session card menu', () => {
     expect(onRemove).toHaveBeenCalledOnce();
   });
 });
+
+describe('hibernated session card', () => {
+  it('offers waking up instead of ending', async () => {
+    const onWake = vi.fn();
+    render(SessionCard, { session: session({ hibernated: true, status: 'idle' }), onFocus: vi.fn(), onEnd: vi.fn(), onResume: vi.fn(), onRemove: vi.fn(), onWake });
+    expect(screen.getByText('Ociosa · hibernada')).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: 'Mais ações' }));
+    expect(screen.queryByRole('menuitem', { name: 'Encerrar sessão' })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Acordar sessão' }));
+    expect(onWake).toHaveBeenCalledOnce();
+  });
+});

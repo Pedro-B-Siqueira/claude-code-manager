@@ -22,10 +22,21 @@
     onPanelResize: (width: number) => void;
     onSelect: (key: string) => void;
     onResume: (session: LiveSessionView) => void;
+    onWake: (session: LiveSessionView) => void;
     onNewSession: () => void;
   }
 
-  let { sessions, activeKey, theme, scrollback, panelWidth, onPanelResize, onSelect, onResume, onNewSession }: Props = $props();
+  let { sessions, activeKey, theme, scrollback, panelWidth, onPanelResize, onSelect, onResume, onWake, onNewSession }: Props = $props();
+
+  // Opening a hibernated session wakes it (once per card); the terminal attaches when it is back.
+  let wakingKey = $state<string | null>(null);
+  $effect(() => {
+    const current = active;
+    if (current?.hibernated && wakingKey !== current.key) {
+      wakingKey = current.key;
+      onWake(current);
+    }
+  });
 
   const active = $derived(sessions.find((session) => session.key === activeKey) ?? sessions[0]);
 
@@ -84,6 +95,10 @@
             {#if active.previewLines.length > 0}
               <pre class="last-words mono">{active.previewLines.join('\n')}</pre>
             {/if}
+          </div>
+        {:else if active.hibernated}
+          <div class="ended">
+            <p>Sessão hibernada para economizar memória. Acordando com <code class="mono">--resume</code>…</p>
           </div>
         {:else if active.exited}
           <div class="ended">

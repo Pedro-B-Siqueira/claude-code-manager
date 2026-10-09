@@ -16,14 +16,21 @@
     onEnd?: (session: LiveSessionView) => void;
     onResume?: (session: LiveSessionView) => void;
     onRemove?: (session: LiveSessionView) => void;
+    onWake?: (session: LiveSessionView) => void;
   }
 
-  let { session, onFocus, onEnd, onResume, onRemove }: Props = $props();
+  let { session, onFocus, onEnd, onResume, onRemove, onWake }: Props = $props();
 
   const prAction = $derived<MenuAction>({ id: 'pr', label: 'Abrir PR', run: () => void openPr(session.sessionId) });
 
   const lifecycleActions = $derived.by((): MenuAction[] => {
     if (session.origin === 'external') return [];
+    if (session.hibernated) {
+      return [
+        ...(onWake ? [{ id: 'wake', label: 'Acordar sessão', run: () => onWake(session) }] : []),
+        ...(onRemove ? [{ id: 'remove', label: 'Remover da grade', run: () => onRemove(session) }] : []),
+      ];
+    }
     if (session.exited) {
       return [
         ...(onResume ? [{ id: 'resume', label: 'Retomar sessão', run: () => onResume(session) }] : []),
@@ -50,6 +57,8 @@
     {/if}
     {#if session.exited}
       <span class="origin" title="O processo terminou; a conversa continua retomável">encerrada</span>
+    {:else if session.hibernated}
+      <span class="origin" title="Processo encerrado para economizar memória; volta com --resume ao abrir">hibernada</span>
     {/if}
     <span class="menu">
       <CardMenu actions={menuActions} />

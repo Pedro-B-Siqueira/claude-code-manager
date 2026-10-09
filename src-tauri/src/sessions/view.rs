@@ -112,7 +112,7 @@ impl ConversationFacts {
             memory_mb: base.memory_mb,
             origin: base.origin,
             pid: base.pid,
-            hibernated: false,
+            hibernated: base.hibernated,
             pinned: summary.is_some_and(|summary| summary.item.pinned),
             exited: base.exited,
             started_at: base.started_at,
@@ -130,6 +130,7 @@ struct ViewBase {
     memory_mb: Option<f64>,
     origin: SessionOrigin,
     pid: Option<u32>,
+    hibernated: bool,
     exited: bool,
     started_at: i64,
 }
@@ -153,6 +154,7 @@ pub fn build_app_view(
 ) -> Result<LiveSessionView, AppError> {
     let cwd = snapshot.launch.cwd.to_string_lossy().into_owned();
     let status = match hook_status {
+        _ if snapshot.hibernated => StatusUpdate { status: SessionStatus::Idle, detail: None },
         Some(_) if snapshot.exited => StatusUpdate { status: SessionStatus::Idle, detail: None },
         Some(status) => status,
         None => interim_status(snapshot),
@@ -171,7 +173,8 @@ pub fn build_app_view(
         memory_mb: if snapshot.exited { None } else { memory_mb },
         origin: SessionOrigin::App,
         pid: snapshot.pid,
-        exited: snapshot.exited,
+        hibernated: snapshot.hibernated,
+        exited: snapshot.exited && !snapshot.hibernated,
         started_at: snapshot.started_at,
     }))
 }
@@ -198,6 +201,7 @@ pub fn build_external_view(connection: &Connection, session: &ExternalSession, m
         memory_mb,
         origin: SessionOrigin::External,
         pid: Some(session.pid),
+        hibernated: false,
         exited: false,
         started_at,
     }))

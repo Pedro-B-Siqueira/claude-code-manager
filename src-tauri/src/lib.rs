@@ -4,6 +4,7 @@ pub mod context;
 pub mod db;
 pub mod error;
 pub mod git;
+pub mod hibernation;
 pub mod hooks;
 pub mod layout;
 pub mod library;
@@ -202,6 +203,8 @@ fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error
     let registry_notifier = handle.clone();
     live::watcher::start(state.paths.claude_home(), Arc::new(move || notify_live_changed(&registry_notifier)));
     app.manage(state);
+    let hibernation_notifier = handle.clone();
+    hibernation::start(handle.clone(), Arc::new(move || notify_live_changed(&hibernation_notifier)));
     match tray::install(&handle, request_quit) {
         Ok(updater) => {
             updater.schedule();
@@ -267,6 +270,8 @@ pub fn run() {
             commands::sessions::app_quit,
             commands::sessions::app_info,
             commands::sessions::take_notified_session,
+            commands::sessions::session_wake,
+            commands::sessions::ui_set_visible,
             commands::dev::dev_scenario,
             commands::git::git_status,
             commands::git::worktree_plan,

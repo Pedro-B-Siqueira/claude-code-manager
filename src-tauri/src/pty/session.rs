@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -39,6 +40,7 @@ pub struct SessionSnapshot {
     pub pid: Option<u32>,
     pub exit_code: Option<i32>,
     pub exited: bool,
+    pub hibernated: bool,
     pub preview_lines: Vec<String>,
 }
 
@@ -65,6 +67,7 @@ pub struct PtySession {
     writer: Mutex<Box<dyn Write + Send>>,
     output: Mutex<OutputState>,
     exit: Mutex<ExitState>,
+    hibernated: AtomicBool,
 }
 
 pub fn now_ms() -> i64 {
@@ -103,7 +106,16 @@ impl PtySession {
                 last_output_at: started_at,
             }),
             exit: Mutex::new(ExitState::default()),
+            hibernated: AtomicBool::new(false),
         }
+    }
+
+    pub fn mark_hibernated(&self) {
+        self.hibernated.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_hibernated(&self) -> bool {
+        self.hibernated.load(Ordering::SeqCst)
     }
 
     pub fn pid(&self) -> Option<u32> {
@@ -125,6 +137,7 @@ impl PtySession {
             pid: self.pid,
             exit_code: exit.code,
             exited: exit.exited,
+            hibernated: self.is_hibernated(),
             preview_lines: output.screen.preview_lines(),
         }
     }

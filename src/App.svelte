@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
-  import { quitApp, takeNotifiedSession } from './lib/api/commands';
+  import { quitApp, setUiVisible, takeNotifiedSession } from './lib/api/commands';
   import { onCloseRequested, onTrayFocusSession } from './lib/api/events';
   import type { AppSettings, LiveSessionView } from './lib/api/types';
   import { PALETTE_ACTIONS } from './lib/app/palette-actions';
@@ -41,8 +41,13 @@
     void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) void openNotifiedSession();
     });
+    document.addEventListener('visibilitychange', () => void setUiVisible(!document.hidden).catch(() => undefined));
     if (import.meta.env.DEV) void import('./lib/dev/scenario').then(({ runDevScenario }) => runDevScenario());
   });
+
+  function wakeSession(session: LiveSessionView): void {
+    void liveSessionsStore.wake(session.key);
+  }
 
   const orderedSessions = $derived(orderSessions(liveSessionsStore.sessions, layoutStore.gridOrder));
   const visibleSessions = $derived(orderedSessions.filter((session) => matchesFilter(session, uiStore.filter)));
@@ -175,6 +180,7 @@
               onEnd={(session) => (uiStore.confirmation = { kind: 'end-session', session })}
               onResume={resumeSession}
               onRemove={(session) => void liveSessionsStore.close(session.key)}
+              onWake={wakeSession}
             />
           {:else}
             <FocusView
@@ -186,6 +192,7 @@
               onPanelResize={(focusPanelWidth) => layoutStore.resize({ focusPanelWidth })}
               onSelect={(key) => (uiStore.focusedSessionKey = key)}
               onResume={resumeSession}
+              onWake={wakeSession}
               onNewSession={() => (uiStore.newSessionOpen = true)}
             />
           {/if}

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
@@ -32,6 +33,8 @@ pub struct SpawnRequest {
 pub struct PtyManager {
     sessions: Arc<Mutex<HashMap<String, Arc<PtySession>>>>,
     notify: PtyNotifier,
+    /// Set while the window is hidden: previews are not sent to a UI nobody is looking at.
+    previews_paused: Arc<AtomicBool>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -40,7 +43,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl PtyManager {
     pub fn new(notify: PtyNotifier) -> Self {
-        let manager = Self { sessions: Arc::default(), notify };
+        let manager = Self { sessions: Arc::default(), notify, previews_paused: Arc::default() };
         manager.start_preview_ticker();
         manager
     }
@@ -48,8 +51,12 @@ impl PtyManager {
     fn start_preview_ticker(&self) {
         let sessions = Arc::clone(&self.sessions);
         let notify = Arc::clone(&self.notify);
+        let paused = Arc::clone(&self.previews_paused);
         let spawned = thread::Builder::new().name("pty-preview".to_owned()).spawn(move || loop {
             thread::sleep(PREVIEW_INTERVAL);
+            if paused.load(Ordering::Relaxed) {
+                continue;
+            }
             let current: Vec<Arc<PtySession>> = lock(&sessions).values().cloned().collect();
             for session in current {
                 if let Some(lines) = session.take_preview_if_changed() {
@@ -142,6 +149,21 @@ impl PtyManager {
         } else {
             lock(&self.sessions).remove(key);
         }
+        Ok(())
+    }
+
+    pub fn set_previews_paused(&self, paused: bool) {
+        self.previews_paused.store(paused, Ordering::Relaxed);
+    }
+
+    /// Ends the process to free memory; the card stays, marked hibernated, until it is woken.
+    pub fn hibernate(&self, key: &str, grace: Duration) -> Result<(), AppError> {
+        let session = self.session(key)?;
+        if !session.is_running() {
+            return Ok(());
+        }
+        session.mark_hibernated();
+        terminate_process_group(session.pid(), grace);
         Ok(())
     }
 

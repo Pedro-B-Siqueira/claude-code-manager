@@ -2,7 +2,7 @@
 
 Gerenciador leve de sessões do Claude Code para macOS, com terminais embutidos. Não é uma IDE: serve para acompanhar várias sessões ao mesmo tempo, ver o que cada uma alterou e retomar sessões antigas.
 
-> **Status:** etapa 8 de 10 (navegação: ⌘K, atalhos, drag-and-drop, painéis redimensionáveis e configurações). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Status:** etapa 9 de 10 (economia: hibernação, pausa de renderização e medição de memória). A arquitetura completa está em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Garantias
 
@@ -39,6 +39,31 @@ npm install
 Fechar a janela (botão vermelho) só a esconde: as sessões continuam rodando e o ícone na barra de menus mostra quantas precisam de você. Para sair de verdade, use ⌘Q ou "Sair" no menu do ícone; se alguma sessão estiver trabalhando, o app pede confirmação. Os terminais são encerrados e as conversas continuam retomáveis.
 
 O build é local e não é assinado nem notarizado. Na primeira abertura do `.app`, use botão direito → **Abrir**.
+
+## Memória
+
+Medido num MacBook Air M-series de 16 GB, macOS 26.6, com `scripts/measure-memory.sh`:
+
+| Cenário | App | WebKit | Terminais | Total |
+|---|---|---|---|---|
+| Release, 0 sessões | 98 MB | 112 MB | — | **210 MB** |
+| Dev, 0 sessões | 131 MB | 163 MB | — | 294 MB |
+| Dev, 6 sessões (`fake-claude`) | 133 MB | 183 MB | 57 MB | 373 MB |
+
+O custo do app por sessão é pequeno: cerca de 0,3 MB no processo principal, uns 3 MB no WebKit e o shell de login (por volta de 8 MB). O peso real é o próprio `claude`, que ocupou de 500 a 610 MB por processo na mesma máquina. Com 6 sessões reais, isso dá entre 3 e 3,7 GB só nos processos do Claude Code.
+
+Por isso a hibernação vem ligada: depois de 30 minutos ociosa (configurável), uma sessão aberta pelo app tem o processo encerrado e volta com `claude --resume` quando você a abre. Sessões trabalhando, pedindo permissão ou esperando você nunca hibernam. Outras economias:
+
+- A grade mostra a prévia do terminal em texto, gerada no backend. Só a sessão em foco tem um xterm.js montado.
+- Com a janela oculta, as prévias param de ser enviadas para a interface.
+- O scrollback é limitado (5.000 linhas por padrão).
+
+Para medir na sua máquina:
+
+```bash
+scripts/measure-memory.sh baseline   # antes de abrir o app
+scripts/measure-memory.sh report     # com o app aberto
+```
 
 ## Estrutura
 

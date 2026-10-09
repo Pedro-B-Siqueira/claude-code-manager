@@ -12,9 +12,10 @@
     onEnd: (session: LiveSessionView) => void;
     onResume: (session: LiveSessionView) => void;
     onRemove: (session: LiveSessionView) => void;
+    onWake: (session: LiveSessionView) => void;
   }
 
-  let { sessions, reorderable, onReorder, onFocus, onEnd, onResume, onRemove }: Props = $props();
+  let { sessions, reorderable, onReorder, onFocus, onEnd, onResume, onRemove, onWake }: Props = $props();
 
   const FLIP_MS = 250;
 
@@ -65,7 +66,7 @@
   >
     {#each items as item (item.id)}
       <div class="slot" class:drop-preview={item.isDndShadowItem} animate:flip={{ duration: flipDuration }}>
-        <SessionCard session={item} {onFocus} {onEnd} {onResume} {onRemove} />
+        <SessionCard session={item} {onFocus} {onEnd} {onResume} {onRemove} {onWake} />
       </div>
     {/each}
   </div>

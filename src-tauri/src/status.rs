@@ -100,6 +100,12 @@ impl StatusTracker {
         Some(StatusUpdate { status, detail: tracked.detail.clone() })
     }
 
+    /// The current status together with when it last changed.
+    pub fn current_with_time(&self, key: &str, now_ms: i64) -> Option<(StatusUpdate, i64)> {
+        let changed_at = self.entries.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).get(key)?.changed_at;
+        self.current(key, now_ms).map(|update| (update, changed_at))
+    }
+
     pub fn forget(&self, key: &str) {
         self.entries.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(key);
     }

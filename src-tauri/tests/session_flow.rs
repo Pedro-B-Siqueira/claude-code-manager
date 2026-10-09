@@ -148,3 +148,15 @@ fn missing_working_directory_is_rejected() {
     let result = harness.manager.spawn(SpawnRequest { key: "x".to_owned(), launch, command, scrollback_lines: 100 });
     assert!(matches!(result, Err(AppError::MissingDirectory(_))));
 }
+
+#[test]
+fn hibernating_ends_the_process_but_keeps_the_card() {
+    let harness = Harness::new();
+    let sink = harness.spawn("s6");
+    wait_until("banner", || sink.text().contains("fake-claude ready"));
+    harness.manager.hibernate("s6", Duration::from_millis(300)).unwrap();
+    wait_until("exit after hibernation", || harness.exited("s6").is_some());
+    let snapshot = harness.manager.snapshot("s6").unwrap();
+    assert!(snapshot.exited && snapshot.hibernated);
+    assert!(harness.manager.running_keys().is_empty());
+}

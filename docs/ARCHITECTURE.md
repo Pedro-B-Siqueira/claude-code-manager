@@ -111,6 +111,7 @@ claude-code-manager/
 | `hooks/` | Servidor HTTP local (`tiny_http`) só em `127.0.0.1`, porta aleatória, corpo limitado a 1 MB e token por sessão comparado em tempo constante. Sempre responde `{}`: observa, nunca decide permissão no lugar do Claude Code. O arquivo de settings é regravado a cada execução (a porta muda) e não contém segredo; o token chega ao Claude Code por variável de ambiente (`allowedEnvVars`) |
 | `live/` | Lista de sessões vivas: as do app (status por hooks) e as externas (registro `~/.claude/sessions`, com `ps` + `lsof` como fallback), sem duplicar as que o app abriu. RSS por árvore de processos. FSEvents no registro e checagem de processos vivos a cada 10 s |
 | `status.rs` | Máquina de estados das sessões |
+| `hibernation.rs` | A cada 30 s, encerra sessões do app ociosas além do limite (Ociosa ou Concluída, sem saída no terminal). Nunca as que estão trabalhando, pedindo permissão ou esperando o usuário. `session_wake` reabre com `--resume` na mesma chave |
 | `git.rs` | Branch, diffstat, worktrees (listar, criar, remover só se estiver limpo), branch principal (`origin/HEAD` → `main` → `master`), nome de branch seguro (`slugify`), inferência da pasta de worktrees e URL de compare (GitHub, GitLab, Bitbucket) |
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |

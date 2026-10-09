@@ -14,9 +14,16 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/** Dev builds only: opens a session in the given folder and types into it (see `commands/dev.rs`). */
+const MEMORY_SCENARIO_SESSIONS = 6;
+
+/** Dev builds only (see `commands/dev.rs`): `pty-smoke` opens a session and types into it;
+ *  `memory` opens six sessions for the memory measurement. */
 export async function runDevScenario(): Promise<void> {
   const scenario = await invoke<DevScenario | null>('dev_scenario');
+  if (scenario?.name === 'memory') {
+    for (let index = 0; index < MEMORY_SCENARIO_SESSIONS; index += 1) await liveSessionsStore.open(scenario.cwd);
+    return;
+  }
   if (scenario?.name !== 'pty-smoke') return;
   const session = await liveSessionsStore.open(scenario.cwd);
   if (!session) return;

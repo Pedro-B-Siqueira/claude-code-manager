@@ -173,3 +173,11 @@ export function fetchGridOrder(): Promise<string[]> {
 export function saveGridOrder(sessionIds: string[]): Promise<void> {
   return invoke<void>('grid_order_set', { sessionIds });
 }
+
+export function wakeSession(key: string): Promise<LiveSessionView> {
+  return invoke<LiveSessionView>('session_wake', { key });
+}
+
+export function setUiVisible(visible: boolean): Promise<void> {
+  return invoke<void>('ui_set_visible', { visible });
+}

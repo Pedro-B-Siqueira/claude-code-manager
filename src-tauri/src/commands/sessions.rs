@@ -28,10 +28,13 @@ impl OutputSink for ChannelSink {
 }
 
 pub(crate) fn launch(state: &AppState, app: &AppHandle, launch: LaunchSpec) -> Result<LiveSessionView, AppError> {
+    launch_with_key(state, app, launch, uuid::Uuid::new_v4().to_string())
+}
+
+fn launch_with_key(state: &AppState, app: &AppHandle, launch: LaunchSpec, key: String) -> Result<LiveSessionView, AppError> {
     let app_settings = settings::load(&state.database)?;
     let shell = state.shell();
     let claude = resolve_claude(app_settings.claude_binary.as_deref(), shell, state.paths.home())?;
-    let key = uuid::Uuid::new_v4().to_string();
     let settings_file = state.hook_settings_file.get();
     let hook_env = match settings_file {
         Some(_) => vec![(TOKEN_ENV.to_owned(), state.hook_tokens.issue(&key)), (SESSION_ENV.to_owned(), key.clone())],
@@ -151,6 +154,25 @@ pub async fn recent_dirs(state: State<'_, AppState>) -> Result<Vec<String>, AppE
     }
     directories.truncate(12);
     Ok(directories)
+}
+
+/// Brings a hibernated session back with `claude --resume`, keeping its card (same key).
+#[tauri::command]
+pub async fn session_wake(state: State<'_, AppState>, app: AppHandle, key: String) -> Result<LiveSessionView, AppError> {
+    let snapshot = state.pty.snapshot(&key)?;
+    if !snapshot.hibernated {
+        return find_view(&state, &key);
+    }
+    state.pty.forget(&key);
+    state.status.forget(&key);
+    let spec = LaunchSpec { mode: LaunchMode::Resume, ..snapshot.launch };
+    launch_with_key(&state, &app, spec, key)
+}
+
+/// The UI reports whether the window is visible; terminal previews pause while it is not.
+#[tauri::command]
+pub fn ui_set_visible(state: State<'_, AppState>, visible: bool) {
+    state.pty.set_previews_paused(!visible);
 }
 
 /// Called by the UI after the user confirmed quitting with sessions still open.

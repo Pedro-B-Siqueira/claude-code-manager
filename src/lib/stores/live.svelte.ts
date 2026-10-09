@@ -1,4 +1,4 @@
-import { closeSession, fetchLiveSessions, newSession, resumeSession } from '../api/commands';
+import { closeSession, fetchLiveSessions, newSession, resumeSession, wakeSession } from '../api/commands';
 import { onLibraryChanged, onLiveChanged, onSessionExited, onSessionPreview } from '../api/events';
 import { describeFailure, reportError, type FailureCause } from '../api/logger';
 import type { LiveSessionView } from '../api/types';
@@ -71,6 +71,10 @@ class LiveSessionsStore {
 
   async resume(sessionId: string): Promise<LiveSessionView | null> {
     return this.track(resumeSession(sessionId), 'Não foi possível retomar a sessão');
+  }
+
+  async wake(key: string): Promise<LiveSessionView | null> {
+    return this.track(wakeSession(key), 'Não foi possível acordar a sessão');
   }
 
   async close(key: string): Promise<void> {
