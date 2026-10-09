@@ -1,0 +1,8 @@
+[package]
+name = "fake-claude"
+version = "0.1.0"
+description = "Binario falso do claude para testes (nunca gasta cota)"
+edition = "2024"
+publish = false
+
+[dependencies]
