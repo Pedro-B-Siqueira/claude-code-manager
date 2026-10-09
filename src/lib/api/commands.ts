@@ -11,6 +11,7 @@ import type {
   SessionListItem,
   SessionSummary,
   OpenOutcome,
+  PanelLayout,
   WorktreeInfo,
   WorktreePlan,
 } from './types';
@@ -155,4 +156,20 @@ export function openFinder(path: string): Promise<void> {
 
 export function openPullRequest(sessionId: string): Promise<string> {
   return invoke<string>('open_pr', { sessionId });
+}
+
+export function fetchLayout(): Promise<PanelLayout> {
+  return invoke<PanelLayout>('layout_get');
+}
+
+export function saveLayout(layout: PanelLayout): Promise<PanelLayout> {
+  return invoke<PanelLayout>('layout_set', { layout });
+}
+
+export function fetchGridOrder(): Promise<string[]> {
+  return invoke<string[]>('grid_order_get');
+}
+
+export function saveGridOrder(sessionIds: string[]): Promise<void> {
+  return invoke<void>('grid_order_set', { sessionIds });
 }

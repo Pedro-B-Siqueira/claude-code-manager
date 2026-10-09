@@ -9,6 +9,7 @@
   import { attachTerminal, detachTerminal, resizeTerminal, writeTerminal, type TerminalChunk } from '../../api/commands';
   import { reportError, reportWarning, type FailureCause } from '../../api/logger';
   import type { Theme } from '../../api/types';
+  import { shortcutFor } from '../../app/shortcuts';
   import { terminalTheme } from '../../terminal/palette';
 
   interface Props {
@@ -41,8 +42,10 @@
     }
   }
 
-  function copySelectionOnCommandC(target: Terminal): void {
+  /** ⌘C copies the selection; app shortcuts (⌘K, ⌘N, ⌘1…9) are never typed into the terminal. */
+  function handleAppKeys(target: Terminal): void {
     target.attachCustomKeyEventHandler((event) => {
+      if (shortcutFor(event)) return false;
       const isCopy = event.type === 'keydown' && event.metaKey && event.key === 'c' && target.hasSelection();
       if (isCopy) void navigator.clipboard.writeText(target.getSelection());
       return !isCopy;
@@ -68,7 +71,7 @@
     target.loadAddon(fit);
     target.loadAddon(new Unicode11Addon());
     target.unicode.activeVersion = '11';
-    copySelectionOnCommandC(target);
+    handleAppKeys(target);
 
     const output = new Channel<TerminalChunk>();
     output.onmessage = (chunk) => target.write(toBytes(chunk));

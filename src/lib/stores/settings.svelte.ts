@@ -27,8 +27,12 @@ class SettingsStore {
 
   async toggleTheme(): Promise<void> {
     const nextTheme: Theme = this.current.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(nextTheme, true);
-    await this.update({ ...this.current, theme: nextTheme });
+    await this.save({ ...this.current, theme: nextTheme });
+  }
+
+  async save(next: AppSettings): Promise<void> {
+    if (next.theme !== this.current.theme) applyTheme(next.theme, true);
+    await this.update(next);
   }
 
   private async update(next: AppSettings): Promise<void> {

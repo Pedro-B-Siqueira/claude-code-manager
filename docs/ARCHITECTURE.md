@@ -148,7 +148,7 @@ claude-code-manager/
 - **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `library_file_edits(sessionId, filePath)` (últimas edições do arquivo, cada uma com "Por quê" e diff), `library_edit(editId)` e `library_activity(sessionId, limit)`. O diff é montado sob demanda a partir de `old_string`/`new_string` (ou `content`, para um Write), relidos do transcript pelo offset da linha; diff de linhas por LCS com 3 linhas de contexto.
 - **Git:** `git_status(cwd)` (branch e `git diff HEAD --numstat`), `worktree_plan` (só calcula: pasta, branch, base), `worktree_create` (recalcula o plano no backend, cria e abre a sessão), `worktree_list`, `worktree_remove` (recusa o principal, worktree com alterações pendentes ou com sessão aberta; nunca `--force`), `open_vscode` (avisa se a branch da pasta difere da sessão, sem checkout), `open_finder`, `open_pr` (PR do transcript → `gh pr view` → URL de compare; nunca cria PR nem faz push).
-- **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
+- **App:** `settings_get`, `settings_update`, `layout_get`/`layout_set` (larguras da barra lateral e do painel do foco), `grid_order_get`/`grid_order_set`, `recent_dirs`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 
 **Eventos (`emit`).**
 
@@ -183,7 +183,7 @@ SQLite em `~/Library/Application Support/ClaudeCodeManager/ccm.sqlite`. O cache 
 | `session_fts` | Índice FTS5 (sem acentos) com os prompts e o texto do assistente, uma linha por mensagem. Título, projeto, branch, arquivos e tags são buscados direto nas tabelas. `tool_result` não é indexado, para o índice ficar pequeno |
 | `projects` | Projeto de cada `cwd`, resolvido pelo `.git` comum (um worktree aponta para o repositório principal) |
 | `app_sessions` | Sessões abertas pelo app, inclusive as hibernadas |
-| `grid_order` | Ordem dos cards na grade |
+| `grid_order` | Ordem dos cards na grade, por `session_id` (a chave do terminal muda a cada execução; o id da sessão sobrevive ao retomar) |
 
 ## Etapas
 

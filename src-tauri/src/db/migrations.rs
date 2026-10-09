@@ -9,6 +9,10 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     ) STRICT;",
     LIBRARY_SCHEMA,
+    "CREATE TABLE grid_order (
+        session_id TEXT PRIMARY KEY,
+        position   INTEGER NOT NULL
+    ) STRICT;",
 ];
 
 const LIBRARY_SCHEMA: &str = "

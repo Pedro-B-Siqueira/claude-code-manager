@@ -7,9 +7,11 @@
     needsYouCount: number;
     onToggleTheme: () => void;
     onShowNeedsYou: () => void;
+    onOpenPalette: () => void;
+    onOpenSettings: () => void;
   }
 
-  let { theme, needsYouCount, onToggleTheme, onShowNeedsYou }: Props = $props();
+  let { theme, needsYouCount, onToggleTheme, onShowNeedsYou, onOpenPalette, onOpenSettings }: Props = $props();
 
   const themeLabel = $derived(theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro');
 </script>
@@ -20,7 +22,7 @@
     <span class="name">Claude Code Manager</span>
   </div>
 
-  <button type="button" class="search" aria-label="Buscar (⌘K)">
+  <button type="button" class="search" aria-label="Buscar (⌘K)" onclick={onOpenPalette}>
     <Icon name="search" size={14} />
     <span class="search-text">Buscar sessões, arquivos, branches…</span>
     <kbd class="mono">⌘K</kbd>
@@ -41,6 +43,9 @@
 
     <button type="button" class="theme" aria-label={themeLabel} title={themeLabel} onclick={onToggleTheme}>
       <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+    </button>
+    <button type="button" class="theme" aria-label="Configurações (⌘,)" title="Configurações (⌘,)" onclick={onOpenSettings}>
+      <Icon name="settings" />
     </button>
   </div>
 </header>

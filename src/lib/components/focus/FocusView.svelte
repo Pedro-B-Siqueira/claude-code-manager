@@ -8,6 +8,8 @@
   import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
   import FileChangeList from '../sessions/FileChangeList.svelte';
+  import ResizeHandle from '../common/ResizeHandle.svelte';
+  import { FOCUS_PANEL_LIMITS } from '../../stores/layout.svelte';
   import StatusBadge from '../sessions/StatusBadge.svelte';
   import XtermView from '../terminal/XtermView.svelte';
 
@@ -16,12 +18,14 @@
     activeKey: string | null;
     theme: Theme;
     scrollback: number;
+    panelWidth: number;
+    onPanelResize: (width: number) => void;
     onSelect: (key: string) => void;
     onResume: (session: LiveSessionView) => void;
     onNewSession: () => void;
   }
 
-  let { sessions, activeKey, theme, scrollback, onSelect, onResume, onNewSession }: Props = $props();
+  let { sessions, activeKey, theme, scrollback, panelWidth, onPanelResize, onSelect, onResume, onNewSession }: Props = $props();
 
   const active = $derived(sessions.find((session) => session.key === activeKey) ?? sessions[0]);
 
@@ -94,6 +98,15 @@
           {/key}
         {/if}
       </section>
+
+      <ResizeHandle
+        label="Largura do painel lateral"
+        value={panelWidth}
+        min={FOCUS_PANEL_LIMITS.min}
+        max={FOCUS_PANEL_LIMITS.max}
+        direction={-1}
+        onResize={onPanelResize}
+      />
 
       <aside class="panel">
         <div class="panel-tabs" role="tablist" aria-label="Painel da sessão">
@@ -208,10 +221,14 @@
 
   .body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) 12px var(--focus-panel-width, 300px);
     flex: 1;
     min-height: 0;
+    transition: grid-template-columns var(--duration-view) var(--ease);
+  }
+
+  .body > :global(.handle) {
+    margin: 0 1px;
   }
 
   .terminal {
@@ -327,6 +344,11 @@
   @media (max-width: 860px) {
     .body {
       grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .body > :global(.handle) {
+      display: none;
     }
   }
 </style>

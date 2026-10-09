@@ -5,6 +5,7 @@ pub mod db;
 pub mod error;
 pub mod git;
 pub mod hooks;
+pub mod layout;
 pub mod library;
 pub mod live;
 pub mod notifications;
@@ -237,6 +238,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::settings::settings_get,
             commands::settings::settings_update,
+            commands::settings::layout_get,
+            commands::settings::layout_set,
+            commands::settings::grid_order_get,
+            commands::settings::grid_order_set,
             commands::library::library_list,
             commands::library::library_search,
             commands::library::library_summary,

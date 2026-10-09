@@ -23,7 +23,8 @@
     | 'close'
     | 'warning'
     | 'terminal'
-    | 'pullRequest';
+    | 'pullRequest'
+    | 'settings';
 
   const ICON_PATHS: Record<IconName, string> = {
     plus: 'M12 5v14M5 12h14',
@@ -49,6 +50,7 @@
     close: 'M6 6l12 12M18 6L6 18',
     warning: 'M12 4l9 16H3ZM12 10v4M12 17h.01',
     terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
+    settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6',
     pullRequest: 'M6 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM6 7v14M18 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM18 17V9a3 3 0 0 0-3-3h-4M13 4l-2 2 2 2',
   };
 </script>

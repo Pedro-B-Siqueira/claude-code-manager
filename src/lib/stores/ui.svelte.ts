@@ -13,6 +13,8 @@ class UiStore {
   focusedSessionKey = $state<string | null>(null);
   resumeOpen = $state(false);
   newSessionOpen = $state(false);
+  paletteOpen = $state(false);
+  settingsOpen = $state(false);
   confirmation = $state<PendingConfirmation | null>(null);
 
   showFilter(filter: SessionFilter): void {

@@ -1,27 +1,72 @@
 <script lang="ts">
+  import { dndzone, type DndEvent } from 'svelte-dnd-action';
+  import { flip } from 'svelte/animate';
   import type { LiveSessionView } from '../../api/types';
   import SessionCard from './SessionCard.svelte';
 
   interface Props {
     sessions: LiveSessionView[];
+    reorderable: boolean;
+    onReorder: (sessionIds: string[]) => void;
     onFocus: (key: string) => void;
     onEnd: (session: LiveSessionView) => void;
     onResume: (session: LiveSessionView) => void;
     onRemove: (session: LiveSessionView) => void;
   }
 
-  let { sessions, onFocus, onEnd, onResume, onRemove }: Props = $props();
+  let { sessions, reorderable, onReorder, onFocus, onEnd, onResume, onRemove }: Props = $props();
+
+  const FLIP_MS = 250;
+
+  /** `isDndShadowItem` marks the placeholder svelte-dnd-action renders at the drop position. */
+  type GridItem = LiveSessionView & { id: string; isDndShadowItem?: boolean };
+
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const flipDuration = reducedMotion ? 0 : FLIP_MS;
+
+  let items = $state<GridItem[]>([]);
+  let dragging = $state(false);
+
+  $effect(() => {
+    if (!dragging) items = sessions.map((session) => ({ ...session, id: session.key }));
+  });
+
+  function consider(event: CustomEvent<DndEvent<GridItem>>): void {
+    dragging = true;
+    items = event.detail.items;
+  }
+
+  function finalize(event: CustomEvent<DndEvent<GridItem>>): void {
+    items = event.detail.items;
+    dragging = false;
+    onReorder(items.map((item) => item.sessionId));
+  }
+
+  /** The card being dragged turns translucent and slightly smaller. */
+  function styleDragged(element: HTMLElement | undefined): void {
+    if (!element) return;
+    element.style.opacity = '0.4';
+    element.style.transform = `${element.style.transform} scale(0.97)`;
+    element.style.outline = 'none';
+  }
 </script>
 
 {#if sessions.length === 0}
   <div class="empty">
     <p class="empty-title">Nenhuma sessão neste filtro</p>
-    <p class="empty-hint">Use “Nova sessão” ou “Retomar sessão” na barra lateral.</p>
+    <p class="empty-hint">Use “Nova sessão” (⌘N) ou “Retomar sessão” na barra lateral.</p>
   </div>
 {:else}
-  <div class="grid">
-    {#each sessions as session (session.key)}
-      <SessionCard {session} {onFocus} {onEnd} {onResume} {onRemove} />
+  <div
+    class="grid"
+    use:dndzone={{ items, flipDurationMs: flipDuration, dragDisabled: !reorderable, dropTargetStyle: {}, transformDraggedElement: styleDragged, zoneTabIndex: -1 }}
+    onconsider={consider}
+    onfinalize={finalize}
+  >
+    {#each items as item (item.id)}
+      <div class="slot" class:drop-preview={item.isDndShadowItem} animate:flip={{ duration: flipDuration }}>
+        <SessionCard session={item} {onFocus} {onEnd} {onResume} {onRemove} />
+      </div>
     {/each}
   </div>
 {/if}
@@ -32,6 +77,21 @@
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 14px;
     align-content: start;
+    outline: none;
+  }
+
+  .slot {
+    min-width: 0;
+  }
+
+  .slot.drop-preview {
+    border-radius: var(--radius-card);
+    outline: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+
+  .slot.drop-preview :global(.card) {
+    opacity: 0.5;
   }
 
   .empty {

@@ -90,7 +90,6 @@
     gap: 18px;
     min-height: 0;
     padding: 14px 12px 12px;
-    border-right: 1px solid var(--border);
     background: var(--bg);
     overflow-y: auto;
   }

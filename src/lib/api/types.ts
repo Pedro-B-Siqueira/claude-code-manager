@@ -198,3 +198,8 @@ export interface WorktreeInfo {
 export interface OpenOutcome {
   warning: string | null;
 }
+
+export interface PanelLayout {
+  sidebarWidth: number;
+  focusPanelWidth: number;
+}
