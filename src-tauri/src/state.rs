@@ -32,6 +32,10 @@ impl AppState {
         self.shell_environment.get_or_init(ShellEnvironment::detect)
     }
 
+    pub fn git(&self) -> crate::git::Git {
+        crate::git::Git::new(self.shell().find_binary("git").unwrap_or_else(|| PathBuf::from("/usr/bin/git")))
+    }
+
     pub fn claudegauge(&self) -> ClaudeGaugeStatus {
         claudegauge::detect(self.paths.claude_home(), self.paths.home())
     }

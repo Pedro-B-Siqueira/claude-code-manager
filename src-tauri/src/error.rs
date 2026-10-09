@@ -23,6 +23,10 @@ pub enum AppError {
     Terminal(String),
     #[error("o comando `claude` não foi encontrado; ajuste o caminho nas configurações")]
     ClaudeNotFound,
+    #[error("git: {0}")]
+    Git(String),
+    #[error("{0}")]
+    Invalid(String),
 }
 
 impl AppError {
@@ -37,6 +41,8 @@ impl AppError {
             Self::UnknownSession(_) => "unknownSession",
             Self::Terminal(_) => "terminal",
             Self::ClaudeNotFound => "claudeNotFound",
+            Self::Git(_) => "git",
+            Self::Invalid(_) => "invalid",
         }
     }
 }

@@ -5,7 +5,8 @@ import { applyTheme } from '../theme/apply-theme';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
-  worktreeRoot: '~/worktrees',
+  worktreeRoot: null,
+  branchPrefixes: ['feat-', 'fix-'],
   scrollbackLines: 5000,
   notifications: 'auto',
   hibernation: { enabled: true, idleMinutes: 30 },

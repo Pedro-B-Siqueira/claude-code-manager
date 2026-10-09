@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { LiveSessionView } from '../../api/types';
   import { formatCost, formatMemory, formatTokens } from '../../format';
+  import { openInFinder, openInVsCode, openPr } from '../../sessions/actions';
+  import { gitStatusStore } from '../../stores/git-status.svelte';
   import Icon from '../common/Icon.svelte';
   import CardMenu, { type MenuAction } from './CardMenu.svelte';
   import ContextMeter from './ContextMeter.svelte';
@@ -18,7 +20,9 @@
 
   let { session, onFocus, onEnd, onResume, onRemove }: Props = $props();
 
-  const menuActions = $derived.by((): MenuAction[] => {
+  const prAction = $derived<MenuAction>({ id: 'pr', label: 'Abrir PR', run: () => void openPr(session.sessionId) });
+
+  const lifecycleActions = $derived.by((): MenuAction[] => {
     if (session.origin === 'external') return [];
     if (session.exited) {
       return [
@@ -27,6 +31,14 @@
       ];
     }
     return onEnd ? [{ id: 'end', label: 'Encerrar sessão', danger: true, run: () => onEnd(session) }] : [];
+  });
+
+  const menuActions = $derived([prAction, ...lifecycleActions]);
+
+  const git = $derived(gitStatusStore.byCwd[session.cwd]);
+
+  $effect(() => {
+    gitStatusStore.refresh(session.cwd);
   });
 </script>
 
@@ -40,7 +52,7 @@
       <span class="origin" title="O processo terminou; a conversa continua retomável">encerrada</span>
     {/if}
     <span class="menu">
-      {#if menuActions.length > 0}<CardMenu actions={menuActions} />{/if}
+      <CardMenu actions={menuActions} />
     </span>
   </header>
 
@@ -66,6 +78,14 @@
 
   <ContextMeter percent={session.contextPercent} />
 
+  {#if git && (git.diff.added > 0 || git.diff.removed > 0)}
+    <p class="git-stat mono" title="git diff HEAD na pasta da sessão">
+      git{#if git.branch && git.branch !== session.branch}&nbsp;<span class="branch-drift" title="A pasta está em outra branch">{git.branch}</span>{/if}
+      <span class="added">+{git.diff.added}</span> <span class="removed">−{git.diff.removed}</span> · {git.diff.files.length}
+      {git.diff.files.length === 1 ? 'arquivo' : 'arquivos'}
+    </p>
+  {/if}
+
   <footer class="foot">
     <span class="stats mono">
       <span title="Tokens da sessão">{formatTokens(session.totalTokens)} tok</span>
@@ -79,10 +99,10 @@
       {/if}
     </span>
     <span class="actions">
-      <button type="button" class="icon-button" aria-label="Abrir no VS Code" title="Abrir no VS Code">
+      <button type="button" class="icon-button" aria-label="Abrir no VS Code" title="Abrir no VS Code" onclick={() => void openInVsCode(session.cwd, session.branch)}>
         <Icon name="code" />
       </button>
-      <button type="button" class="icon-button" aria-label="Abrir no Finder" title="Abrir no Finder">
+      <button type="button" class="icon-button" aria-label="Abrir no Finder" title="Abrir no Finder" onclick={() => void openInFinder(session.cwd)}>
         <Icon name="folder" />
       </button>
       <button type="button" class="focus-button" onclick={() => onFocus(session.key)}>
@@ -193,6 +213,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .git-stat {
+    margin: -4px 0 0;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .git-stat .branch-drift {
+    color: var(--amber);
+  }
+
+  .git-stat .added {
+    color: var(--green);
+  }
+
+  .git-stat .removed {
+    color: var(--diff-removed);
   }
 
   .foot {

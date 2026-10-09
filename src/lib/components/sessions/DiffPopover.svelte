@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { relativePath } from '../../format';
+  import { ltrPath, relativePath } from '../../format';
   import { diffPopoverStore } from '../../stores/diff-popover.svelte';
   import Icon from '../common/Icon.svelte';
 
@@ -46,7 +46,7 @@
       <p class="muted">Nenhuma edição registrada para este arquivo.</p>
     {:else}
       <header>
-        <span class="path mono" title={edit.filePath}>{relativePath(edit.filePath, diffPopoverStore.basePath)}</span>
+        <span class="path mono" title={edit.filePath}>{ltrPath(relativePath(edit.filePath, diffPopoverStore.basePath))}</span>
         <span class="range">{range}</span>
         {#if diffPopoverStore.edits.length > 1}
           <span class="nav">

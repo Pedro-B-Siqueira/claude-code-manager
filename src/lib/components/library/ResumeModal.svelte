@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { SessionListItem } from '../../api/types';
+  import { openInVsCode } from '../../sessions/actions';
   import { libraryStore } from '../../stores/library.svelte';
   import Icon from '../common/Icon.svelte';
   import HistoryRow from './HistoryRow.svelte';
@@ -143,7 +144,12 @@
             />
           </div>
           <footer class="detail-actions">
-            <button type="button" class="secondary" disabled title="Em breve">
+            <button
+              type="button"
+              class="secondary"
+              disabled={!libraryStore.summary.cwdExists}
+              onclick={() => libraryStore.summary && void openInVsCode(libraryStore.summary.item.cwd ?? '', libraryStore.summary.item.branch)}
+            >
               <Icon name="code" size={14} />Abrir no VS Code
             </button>
             <button

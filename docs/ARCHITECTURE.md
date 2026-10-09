@@ -110,7 +110,7 @@ claude-code-manager/
 | `hooks/` | Servidor HTTP local (`tiny_http`) só em `127.0.0.1`, porta aleatória, corpo limitado a 1 MB e token por sessão comparado em tempo constante. Sempre responde `{}`: observa, nunca decide permissão no lugar do Claude Code. O arquivo de settings é regravado a cada execução (a porta muda) e não contém segredo; o token chega ao Claude Code por variável de ambiente (`allowedEnvVars`) |
 | `live/` | Lista de sessões vivas: as do app (status por hooks) e as externas (registro `~/.claude/sessions`, com `ps` + `lsof` como fallback), sem duplicar as que o app abriu. RSS por árvore de processos. FSEvents no registro e checagem de processos vivos a cada 10 s |
 | `status.rs` | Máquina de estados das sessões |
-| `git.rs` | Branch, diffstat e worktrees (listar, criar, remover se estiver limpo) |
+| `git.rs` | Branch, diffstat, worktrees (listar, criar, remover só se estiver limpo), branch principal (`origin/HEAD` → `main` → `master`), nome de branch seguro (`slugify`), inferência da pasta de worktrees e URL de compare (GitHub, GitLab, Bitbucket) |
 | `integrations.rs` | VS Code, Finder e abertura de PR (`gh` ou URL de compare) |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
@@ -146,7 +146,7 @@ claude-code-manager/
 - **Sessões vivas:** `live_list`, `live_session(key)`, `session_new({cwd})`, `session_resume(id)` (reaproveita a sessão se já estiver aberta), `session_close(key)` (encerra o grupo de processos ou remove da grade se já terminou), `recent_dirs`, `app_quit`.
 - **Terminal:** `pty_attach(key, channel)` (envia o replay e depois a saída ao vivo por `Channel` binário), `pty_detach`, `pty_write`, `pty_resize`.
 - **Detalhes:** `library_file_edits(sessionId, filePath)` (últimas edições do arquivo, cada uma com "Por quê" e diff), `library_edit(editId)` e `library_activity(sessionId, limit)`. O diff é montado sob demanda a partir de `old_string`/`new_string` (ou `content`, para um Write), relidos do transcript pelo offset da linha; diff de linhas por LCS com 3 linhas de contexto.
-- **Git:** `git_status`, `worktree_list`, `worktree_create`, `worktree_remove`, `open_vscode`, `open_finder`, `open_pr`.
+- **Git:** `git_status(cwd)` (branch e `git diff HEAD --numstat`), `worktree_plan` (só calcula: pasta, branch, base), `worktree_create` (recalcula o plano no backend, cria e abre a sessão), `worktree_list`, `worktree_remove` (recusa o principal, worktree com alterações pendentes ou com sessão aberta; nunca `--force`), `open_vscode` (avisa se a branch da pasta difere da sessão, sem checkout), `open_finder`, `open_pr` (PR do transcript → `gh pr view` → URL de compare; nunca cria PR nem faz push).
 - **App:** `settings_get`, `settings_update`, `recent_dirs`, `grid_order_set`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 
 **Eventos (`emit`).**

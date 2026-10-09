@@ -63,3 +63,11 @@ export function relativePath(path: string, base: string | null): string {
   if (base && path.startsWith(`${base}/`)) return path.slice(base.length + 1);
   return path;
 }
+
+const LEFT_TO_RIGHT_MARK = '\u200e';
+
+/** Keeps a path readable inside `direction: rtl` (used to truncate from the start): without the
+ *  marks the bidi algorithm moves the leading slash to the end. */
+export function ltrPath(path: string): string {
+  return `${LEFT_TO_RIGHT_MARK}${path}${LEFT_TO_RIGHT_MARK}`;
+}

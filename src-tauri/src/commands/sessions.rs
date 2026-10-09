@@ -27,7 +27,7 @@ impl OutputSink for ChannelSink {
     }
 }
 
-fn launch(state: &AppState, app: &AppHandle, launch: LaunchSpec) -> Result<LiveSessionView, AppError> {
+pub(crate) fn launch(state: &AppState, app: &AppHandle, launch: LaunchSpec) -> Result<LiveSessionView, AppError> {
     let app_settings = settings::load(&state.database)?;
     let shell = state.shell();
     let claude = resolve_claude(app_settings.claude_binary.as_deref(), shell, state.paths.home())?;

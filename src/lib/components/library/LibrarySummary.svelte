@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { SessionSummary } from '../../api/types';
-  import { formatCost, formatDuration, formatRelativeTime, formatTokens, relativePath } from '../../format';
+  import { formatCost, formatDuration, formatRelativeTime, formatTokens, ltrPath, relativePath } from '../../format';
   import { diffHover } from '../../stores/diff-popover.svelte';
   import Icon from '../common/Icon.svelte';
   import ContextMeter from '../sessions/ContextMeter.svelte';
@@ -75,7 +75,7 @@
               title={file.path}
               tabindex="0"
               use:diffHover={{ kind: 'file', sessionId: item.id, filePath: file.path, basePath: item.cwd }}
-            >{relativePath(file.path, item.cwd)}</span>
+            >{ltrPath(relativePath(file.path, item.cwd))}</span>
             {#if file.isNewFile}<span class="new">novo</span>{/if}
             <span class="delta mono"><span class="added">+{file.added}</span> <span class="removed">−{file.removed}</span></span>
           </li>

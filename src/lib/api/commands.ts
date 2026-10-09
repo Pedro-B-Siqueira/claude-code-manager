@@ -4,11 +4,15 @@ import type {
   AppInfo,
   AppSettings,
   EditDetail,
+  GitStatus,
   IndexProgress,
   LiveSessionView,
   SearchHit,
   SessionListItem,
   SessionSummary,
+  OpenOutcome,
+  WorktreeInfo,
+  WorktreePlan,
 } from './types';
 
 export function fetchSettings(): Promise<AppSettings> {
@@ -119,4 +123,36 @@ export function fetchEdit(editId: number): Promise<EditDetail | null> {
 
 export function fetchActivity(sessionId: string, limit: number): Promise<ActivityItem[]> {
   return invoke<ActivityItem[]>('library_activity', { sessionId, limit });
+}
+
+export function fetchGitStatus(cwd: string): Promise<GitStatus> {
+  return invoke<GitStatus>('git_status', { cwd });
+}
+
+export function planWorktree(cwd: string, prefix: string, name: string): Promise<WorktreePlan> {
+  return invoke<WorktreePlan>('worktree_plan', { cwd, prefix, name });
+}
+
+export function createWorktree(cwd: string, prefix: string, name: string): Promise<LiveSessionView> {
+  return invoke<LiveSessionView>('worktree_create', { cwd, prefix, name });
+}
+
+export function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
+  return invoke<WorktreeInfo[]>('worktree_list', { cwd });
+}
+
+export function removeWorktree(cwd: string, path: string): Promise<void> {
+  return invoke<void>('worktree_remove', { cwd, path });
+}
+
+export function openVsCode(path: string, expectedBranch: string | null): Promise<OpenOutcome> {
+  return invoke<OpenOutcome>('open_vscode', { path, expectedBranch });
+}
+
+export function openFinder(path: string): Promise<void> {
+  return invoke<void>('open_finder', { path });
+}
+
+export function openPullRequest(sessionId: string): Promise<string> {
+  return invoke<string>('open_pr', { sessionId });
 }

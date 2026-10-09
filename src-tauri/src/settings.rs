@@ -46,7 +46,9 @@ impl Default for HibernationSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     pub theme: Theme,
-    pub worktree_root: String,
+    /// `None` = automatic: follow the folder existing worktrees already use (see `git::infer_worktree_root`).
+    pub worktree_root: Option<String>,
+    pub branch_prefixes: Vec<String>,
     pub scrollback_lines: u32,
     pub notifications: NotificationPreference,
     pub hibernation: HibernationSettings,
@@ -57,7 +59,8 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             theme: Theme::default(),
-            worktree_root: "~/worktrees".to_owned(),
+            worktree_root: None,
+            branch_prefixes: vec!["feat-".to_owned(), "fix-".to_owned()],
             scrollback_lines: 5_000,
             notifications: NotificationPreference::default(),
             hibernation: HibernationSettings::default(),
@@ -78,8 +81,11 @@ impl AppSettings {
         self.claude_binary = self
             .claude_binary
             .filter(|binary| !binary.trim().is_empty());
-        if self.worktree_root.trim().is_empty() {
-            self.worktree_root = AppSettings::default().worktree_root;
+        self.worktree_root = self.worktree_root.filter(|root| !root.trim().is_empty());
+        self.branch_prefixes.retain(|prefix| !prefix.trim().is_empty() && prefix.len() <= 24);
+        self.branch_prefixes.dedup();
+        if self.branch_prefixes.is_empty() {
+            self.branch_prefixes = AppSettings::default().branch_prefixes;
         }
         self
     }
@@ -124,7 +130,8 @@ mod tests {
     #[test]
     fn defaults_follow_agreed_decisions() {
         let settings = AppSettings::default();
-        assert_eq!(settings.worktree_root, "~/worktrees");
+        assert_eq!(settings.worktree_root, None, "worktree folder is inferred unless the user sets one");
+        assert_eq!(settings.branch_prefixes, vec!["feat-", "fix-"]);
         assert!(settings.hibernation.enabled);
         assert_eq!(settings.hibernation.idle_minutes, 30);
         assert_eq!(settings.scrollback_lines, 5_000);

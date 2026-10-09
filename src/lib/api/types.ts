@@ -9,7 +9,8 @@ export interface HibernationSettings {
 
 export interface AppSettings {
   theme: Theme;
-  worktreeRoot: string;
+  worktreeRoot: string | null;
+  branchPrefixes: string[];
   scrollbackLines: number;
   notifications: NotificationPreference;
   hibernation: HibernationSettings;
@@ -162,4 +163,38 @@ export interface ActivityItem {
   target: string | null;
   editId: number | null;
   fromSubagent: boolean;
+}
+
+export interface FileStat {
+  path: string;
+  added: number;
+  removed: number;
+}
+
+export interface GitStatus {
+  branch: string | null;
+  diff: { added: number; removed: number; files: FileStat[] };
+}
+
+export interface WorktreePlan {
+  repoRoot: string;
+  repoName: string;
+  root: string;
+  rootInferred: boolean;
+  path: string;
+  branch: string;
+  base: string;
+}
+
+export interface WorktreeInfo {
+  path: string;
+  branch: string | null;
+  isMain: boolean;
+  detached: boolean;
+  clean: boolean | null;
+  inUse: boolean;
+}
+
+export interface OpenOutcome {
+  warning: string | null;
 }

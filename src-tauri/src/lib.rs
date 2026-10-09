@@ -3,6 +3,7 @@ pub mod commands;
 pub mod context;
 pub mod db;
 pub mod error;
+pub mod git;
 pub mod hooks;
 pub mod library;
 pub mod live;
@@ -231,6 +232,14 @@ pub fn run() {
             commands::sessions::app_info,
             commands::sessions::take_notified_session,
             commands::dev::dev_scenario,
+            commands::git::git_status,
+            commands::git::worktree_plan,
+            commands::git::worktree_create,
+            commands::git::worktree_list,
+            commands::git::worktree_remove,
+            commands::git::open_vscode,
+            commands::git::open_finder,
+            commands::git::open_pr,
         ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
