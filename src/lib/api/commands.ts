@@ -221,3 +221,8 @@ export function submitWithImages(key: string, attachmentIds: string[]): Promise<
 export function openLink(url: string): Promise<void> {
   return invoke<void>('open_link', { url });
 }
+
+/** Moves the conversation to the system Trash; refused while the session is open. */
+export function deleteSession(sessionId: string): Promise<void> {
+  return invoke<void>('library_delete', { sessionId });
+}

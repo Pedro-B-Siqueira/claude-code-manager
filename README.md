@@ -38,7 +38,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 **Imagens e links no terminal.** Cole um print com ⌘V ou arraste imagens para o terminal: elas aparecem numa bandeja com miniaturas, saem com um clique no X e vão junto no próximo Enter. Os links aparecem em azul, e ⌘+clique (Ctrl+clique no Linux) abre: páginas no navegador, imagens no visualizador e arquivos no VS Code.
 
-**Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e os tokens escritos. Dá para renomear, fixar, pôr tags e categoria, e retomar no terminal com um clique.
+**Retomar sessões.** O histórico inteiro, com busca local (título, conversa, arquivo, branch, tag), agrupado em fixadas, recentes e por projeto. Cada sessão tem um resumo montado sem LLM: o pedido inicial, onde parou, os arquivos tocados, a duração e os tokens escritos. Dá para renomear, fixar, pôr tags e categoria, apagar (com confirmação; a conversa vai para a Lixeira) e retomar no terminal com um clique.
 
 ![Histórico com busca e resumo](docs/images/retomar.png)
 
@@ -66,7 +66,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ## Garantias
 
-- **`~/.claude/` e `~/.claude.json` são somente leitura.** Toda escrita do app passa por uma checagem que recusa esses caminhos, e um teste de integração exercita o núcleo do app (banco, indexação, hooks e registro de sessões) com `~/.claude` sem permissão de escrita, conferindo que nenhum arquivo ali muda.
+- **`~/.claude/` e `~/.claude.json` são somente leitura.** Toda escrita do app passa por uma checagem que recusa esses caminhos, e um teste de integração exercita o núcleo do app (banco, indexação, hooks e registro de sessões) com `~/.claude` sem permissão de escrita, conferindo que nenhum arquivo ali muda. A única exceção acontece quando você pede: apagar uma conversa no Retomar sessão, depois de confirmar. Só o arquivo dela (`projects/<projeto>/<id>.jsonl`) e a pasta ao lado vão para a Lixeira do sistema, e só se a sessão não estiver aberta em lugar nenhum.
 - **Sua configuração do Claude Code não muda.** Os hooks do app entram só nas sessões que ele abre, pela flag `claude --settings`, e se somam aos seus. O arquivo de settings não tem segredo: o token de cada sessão vai por variável de ambiente.
 - **Zero tokens.** O app nunca chama modelo nenhum nem a API da Anthropic, e não lê o token de login.
 - **Git só com confirmação.** As únicas operações que escrevem são criar e remover worktree. A remoção recusa worktrees com alterações pendentes. Nada de `checkout`, `reset`, `stash` ou `--force`.

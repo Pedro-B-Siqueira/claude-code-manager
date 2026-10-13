@@ -12,9 +12,10 @@
     onSelect: (sessionId: string) => void;
     onRename: (sessionId: string, name: string | null) => void;
     onTogglePin: (sessionId: string) => void;
+    onDelete: (sessionId: string) => void;
   }
 
-  let { item, selected, matchedIn = null, snippet = null, onSelect, onRename, onTogglePin }: Props = $props();
+  let { item, selected, matchedIn = null, snippet = null, onSelect, onRename, onTogglePin, onDelete }: Props = $props();
 
   const MATCH_LABELS: Record<MatchSource, string> = {
     title: 'título',
@@ -96,6 +97,9 @@
       onclick={() => onTogglePin(item.id)}
     >
       <Icon name="pin" size={14} />
+    </button>
+    <button type="button" class="icon-button delete" aria-label="Apagar conversa" title="Apagar conversa" onclick={() => onDelete(item.id)}>
+      <Icon name="trash" size={14} />
     </button>
   </span>
 </div>

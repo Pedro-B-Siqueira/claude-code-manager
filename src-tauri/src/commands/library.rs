@@ -1,9 +1,11 @@
 use tauri::State;
 
 use crate::error::AppError;
+use crate::library::deletion::{self, SystemTrash};
 use crate::library::details::{self, ActivityItem, EditDetail};
 use crate::library::models::{IndexProgress, SearchHit, SessionListItem, SessionSummary};
 use crate::library::queries;
+use crate::live::service::live_views;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -88,4 +90,13 @@ pub async fn library_edit(state: State<'_, AppState>, edit_id: i64) -> Result<Op
 #[tauri::command]
 pub async fn library_activity(state: State<'_, AppState>, session_id: String, limit: u32) -> Result<Vec<ActivityItem>, AppError> {
     details::activity(&state.database.connection(), &session_id, limit.min(500))
+}
+
+/// Moves the conversation to the system Trash: the app's single exception to never touching
+/// `~/.claude` (see `library::deletion`). Refused while the session is open or hibernated here or
+/// running in another terminal.
+#[tauri::command]
+pub async fn library_delete(state: State<'_, AppState>, session_id: String) -> Result<(), AppError> {
+    let open = live_views(&state)?.iter().any(|view| view.session_id == session_id && !view.exited);
+    deletion::delete_conversation(&state.database, state.paths.claude_home(), &session_id, open, &SystemTrash)
 }

@@ -4,7 +4,7 @@ Este documento descreve como o Claude Code Manager é organizado: estrutura de p
 
 ## Princípios
 
-- **Somente leitura no Claude Code.** `~/.claude/` e `~/.claude.json` nunca são escritos. Toda escrita do app passa por `AppPaths::ensure_writable`, que recusa esses caminhos depois de resolver `..` e links simbólicos, e recusa qualquer caminho relativo.
+- **Somente leitura no Claude Code.** `~/.claude/` e `~/.claude.json` nunca são escritos. Toda escrita do app passa por `AppPaths::ensure_writable`, que recusa esses caminhos depois de resolver `..` e links simbólicos, e recusa qualquer caminho relativo. Exceção única, pedida explicitamente: apagar uma conversa no Retomar sessão (`library/deletion.rs`). Depois da confirmação, `projects/<projeto>/<id>.jsonl` e a pasta `<id>/` vão para a Lixeira do sistema; o caminho é validado (uuid, nome exato, dentro de `projects/<projeto>/`, sem links simbólicos) e a sessão não pode estar aberta.
 - **Configuração global intocada.** Hooks entram só nas sessões abertas pelo app, via `claude --settings <arquivo>`.
 - **Zero tokens.** O app não chama modelo nenhum, não envia prompts às sessões e não faz chamadas à API da Anthropic.
 - **Dados próprios isolados.** Tudo que o app guarda fica em `~/Library/Application Support/ClaudeCodeManager/`. A janela usa armazenamento não persistente do WebView, para que nada seja gravado em `~/Library/WebKit`.
@@ -127,6 +127,7 @@ claude-code-manager/
 | `attachments.rs` | Imagens coladas ou arrastadas para o terminal, guardadas em `attachments/` na pasta do app. O tipo é conferido pelos primeiros bytes (PNG, JPEG, GIF, WebP), com limite de 20 MB. Ids no formato `<uuid>.<ext>`, então um id nunca aponta para fora da pasta. Arquivos com mais de 3 dias são apagados ao abrir o app e a cada 6 h |
 | `links.rs` | Destino de cada link clicado no terminal: `http`/`https` no navegador, imagem no Preview, outro arquivo no VS Code (ou só mostrado no Finder), pasta mostrada no Finder. Um `file://` só vai direto para o `open` quando é imagem, para que um link para app ou script nunca o execute |
 | `platform.rs` | O que muda entre macOS e Linux, montado por funções puras testáveis nos dois: `open`/`xdg-open` (no Linux, "mostrar" abre a pasta), VS Code sem `code`, `ps -axo`/`ps -eo`, pasta de dados. O diretório de um processo vem do `lsof` no macOS e de `/proc/<pid>/cwd` no Linux |
+| `library/deletion.rs` | Apagar uma conversa: valida os caminhos, manda arquivo e pasta da sessão para a Lixeira (biblioteca `trash`) e remove a sessão de todas as tabelas do app. É o único código que mexe em `~/.claude` |
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
 | `tray.rs` | Ícone desenhado em código: template preto no macOS, na cor de destaque no Linux (painéis escuros); decide se fechar a janela esconde ou encerra; título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |

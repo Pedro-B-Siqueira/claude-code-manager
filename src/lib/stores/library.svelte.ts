@@ -1,4 +1,5 @@
 import {
+  deleteSession,
   fetchCategories,
   fetchIndexProgress,
   fetchLibrary,
@@ -14,6 +15,7 @@ import { onLibraryChanged, onLibraryProgress } from '../api/events';
 import { reportError, type FailureCause } from '../api/logger';
 import type { IndexProgress, SearchHit, SessionListItem, SessionSummary } from '../api/types';
 import { groupLibrary } from '../library/grouping';
+import { toastStore } from './toasts.svelte';
 
 const SEARCH_DEBOUNCE_MS = 150;
 const RELOAD_DEBOUNCE_MS = 250;
@@ -102,6 +104,23 @@ class LibraryStore {
   async setTags(sessionId: string, tags: string[]): Promise<void> {
     await setSessionTags(sessionId, tags).catch(logged('falha ao salvar tags', tags));
     await this.reload();
+  }
+
+  async deleteConversation(sessionId: string): Promise<void> {
+    const deleted = await deleteSession(sessionId).then(
+      () => true,
+      (cause: FailureCause) => {
+        toastStore.failure('A conversa não foi apagada', cause);
+        return false;
+      },
+    );
+    if (!deleted) return;
+    if (this.selectedId === sessionId) {
+      this.selectedId = null;
+      this.summary = null;
+    }
+    await this.reload();
+    toastStore.show('Conversa movida para a Lixeira.');
   }
 
   async setCategory(sessionId: string, category: string | null): Promise<void> {

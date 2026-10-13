@@ -281,6 +281,7 @@ pub fn run() {
             commands::library::library_file_edits,
             commands::library::library_edit,
             commands::library::library_activity,
+            commands::library::library_delete,
             commands::sessions::session_new,
             commands::sessions::session_resume,
             commands::sessions::session_close,

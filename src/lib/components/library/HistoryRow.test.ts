@@ -22,7 +22,7 @@ const ITEM: SessionListItem = {
 };
 
 function renderRow(overrides: Partial<SessionListItem> = {}) {
-  const handlers = { onSelect: vi.fn(), onRename: vi.fn(), onTogglePin: vi.fn() };
+  const handlers = { onSelect: vi.fn(), onRename: vi.fn(), onTogglePin: vi.fn(), onDelete: vi.fn() };
   render(HistoryRow, { item: { ...ITEM, ...overrides }, selected: false, ...handlers });
   return handlers;
 }
@@ -74,9 +74,17 @@ describe('HistoryRow', () => {
       onSelect: vi.fn(),
       onRename: vi.fn(),
       onTogglePin: vi.fn(),
+      onDelete: vi.fn(),
     });
     expect(screen.getByText('testes').tagName).toBe('MARK');
     expect(screen.getByText(/<b>passando<\/b>/)).toBeInTheDocument();
     expect(screen.getByText('conversa')).toBeInTheDocument();
+  });
+
+  it('asks to delete the conversation without selecting the row', async () => {
+    const handlers = renderRow();
+    await fireEvent.click(screen.getByRole('button', { name: 'Apagar conversa' }));
+    expect(handlers.onDelete).toHaveBeenCalledWith('session-1');
+    expect(handlers.onSelect).not.toHaveBeenCalled();
   });
 });

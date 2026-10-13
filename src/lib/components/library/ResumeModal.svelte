@@ -3,6 +3,7 @@
   import { openInVsCode } from '../../sessions/actions';
   import { libraryStore } from '../../stores/library.svelte';
   import Icon from '../common/Icon.svelte';
+  import ConfirmDialog from '../dialogs/ConfirmDialog.svelte';
   import HistoryRow from './HistoryRow.svelte';
   import LibrarySummary from './LibrarySummary.svelte';
 
@@ -51,7 +52,17 @@
     }
   }
 
+  let pendingDeletion = $state<SessionListItem | null>(null);
+
+  function confirmDeletion(): void {
+    const sessionId = pendingDeletion?.id;
+    pendingDeletion = null;
+    if (sessionId) void libraryStore.deleteConversation(sessionId);
+  }
+
   function handleKey(event: KeyboardEvent): void {
+    // The confirmation handles its own keys; Escape there must not close the whole dialog.
+    if (pendingDeletion) return;
     if (event.key === 'Escape') onClose();
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -71,6 +82,7 @@
     onSelect: (sessionId: string) => void libraryStore.select(sessionId),
     onRename: (sessionId: string, name: string | null) => void libraryStore.rename(sessionId, name),
     onTogglePin: (sessionId: string) => void libraryStore.togglePin(sessionId),
+    onDelete: (sessionId: string) => (pendingDeletion = libraryStore.itemsById.get(sessionId) ?? null),
   };
 </script>
 
@@ -173,6 +185,17 @@
     </div>
   </div>
 </div>
+
+{#if pendingDeletion}
+  <ConfirmDialog
+    title="Apagar a conversa?"
+    message={`“${pendingDeletion.title}” vai para a Lixeira e some daqui e do /resume do Claude Code. Dá para recuperar pela Lixeira.`}
+    confirmLabel="Apagar"
+    danger
+    onConfirm={confirmDeletion}
+    onCancel={() => (pendingDeletion = null)}
+  />
+{/if}
 
 <style>
   .backdrop {

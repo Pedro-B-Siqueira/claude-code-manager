@@ -21,6 +21,7 @@
     | 'sleep'
     | 'pencil'
     | 'close'
+    | 'trash'
     | 'warning'
     | 'terminal'
     | 'pullRequest'
@@ -48,6 +49,7 @@
     sleep: 'M4 6h5l-5 6h5M13 12h4l-4 5h4',
     pencil: 'M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4',
     close: 'M6 6l12 12M18 6L6 18',
+    trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13M10 11v6M14 11v6',
     warning: 'M12 4l9 16H3ZM12 10v4M12 17h.01',
     terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
     settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6',

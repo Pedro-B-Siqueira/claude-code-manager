@@ -50,11 +50,13 @@
 {/if}
 
 <style>
+  /* One column no wider than the card: a long file name is cut with an ellipsis instead of widening the list. */
   .files {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 2px;
   }
 
@@ -79,6 +81,7 @@
   }
 
   .name {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

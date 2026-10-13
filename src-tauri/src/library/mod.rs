@@ -1,3 +1,4 @@
+pub mod deletion;
 pub mod details;
 pub mod diff;
 pub mod indexer;
