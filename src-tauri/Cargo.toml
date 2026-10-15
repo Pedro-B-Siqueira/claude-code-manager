@@ -6,6 +6,7 @@ resolver = "3"
 name = "claude-code-manager"
 version = "0.1.2"
 description = "Gerenciador leve de sessoes do Claude Code"
+license = "MIT"
 edition = "2024"
 rust-version = "1.85"
 publish = false

@@ -167,3 +167,7 @@ O formato dos transcripts e o registro de sessões não são API oficial do Clau
 - [**ClaudeGauge**](https://github.com/PedroHenriqueGazola/ClaudeGauge), de Pedro Henrique Gazola (MIT): referência para a leitura do uso nos transcripts e a detecção de sessões vivas. A lógica foi reescrita em Rust, e cada resposta é contada uma vez só.
 - [**Geist** e **Geist Mono**](https://vercel.com/font), da Vercel (SIL Open Font License 1.1), embutidas no app.
 - Feito com [Tauri](https://tauri.app), [Svelte](https://svelte.dev), [xterm.js](https://xtermjs.org) e [svelte-dnd-action](https://github.com/isaacHagoel/svelte-dnd-action).
+
+## Licença
+
+[MIT](LICENSE).

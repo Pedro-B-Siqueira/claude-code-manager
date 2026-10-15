@@ -2,6 +2,7 @@
   "name": "claude-code-manager",
   "private": true,
   "version": "0.1.2",
+  "license": "MIT",
   "description": "Gerenciador leve de sessões do Claude Code com terminais embutidos (macOS).",
   "type": "module",
   "scripts": {
