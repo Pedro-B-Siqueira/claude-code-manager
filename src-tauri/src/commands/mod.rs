@@ -1,6 +1,8 @@
 pub mod attachments;
 pub mod dev;
 pub mod git;
+pub mod jarvis;
+pub mod repouso;
 pub mod library;
 pub mod links;
 pub mod sessions;

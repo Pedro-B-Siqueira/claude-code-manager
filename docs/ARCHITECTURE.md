@@ -131,6 +131,9 @@ claude-code-manager/
 | `claudegauge.rs` | Detecção do hook do ClaudeGauge lendo o `settings.json` do usuário (só leitura) |
 | `notifications.rs` | Notificações de "pedindo permissão", "esperando você" e "terminou" só para sessões do app e só com a janela fora de foco; em `Auto` ficam desligadas se o hook do ClaudeGauge existir |
 | `tray.rs` | Ícone desenhado em código: template preto no macOS, na cor de destaque no Linux (painéis escuros); decide se fechar a janela esconde ou encerra; título com o número de sessões que precisam de você, lista rápida (as que precisam de você primeiro) e "Sair". Atualizações agrupadas a cada 500 ms. Sem cota |
+| `sessions/action.rs` | "Ação atual" de cada sessão do app para o Modo Jarvis, só com os hooks já injetados: ferramenta e alvo do `PreToolUse`, comando do `PermissionRequest`, última linha do `last_assistant_message` do `Stop`, pergunta dessa resposta quando chega o `Notification:idle_prompt`. Sessões sem hook usam o transcript indexado (última linha de `activity` ou `sessions.last_assistant`) |
+| `jarvis.rs` | Janela do Modo Jarvis: criada sob demanda em tela cheia (simple fullscreen no macOS) no monitor da janela principal e destruída ao sair, levando junto o processo WebContent dela. Lê `jarvis-shapes.json` (regras de forma) e, só em build de desenvolvimento, sessões de teste e o timer de medição |
+| `repouso/` | Bloqueio na tela do Jarvis. `lock.rs` é a máquina de estados: liga as etapas em ordem (arquivo pendente, watchdog, `caffeinate -d -i -w`, janela principal escondida, Jarvis no nível de protetor de tela, menu do app removido, modo quiosque por `presentationOptions`, janelas `lock-N` nos outros monitores) e desfaz as já ligadas se uma falhar. O estado nunca fica travado enquanto uma etapa roda, porque as etapas pulam para a thread principal. `native.rs` fala com AppKit e LocalAuthentication (`deviceOwnerAuthentication`). `pending.rs` é o watchdog: um `sh` fora do grupo de processos do app que apaga a tela (`pmset displaysleepnow`) se o app morrer com `repouso.json` presente; o app apaga esse arquivo ao abrir. No Linux, ativar é recusado antes de mudar qualquer coisa |
 | `commands/` | Handlers finos por domínio |
 
 ### Status das sessões
@@ -165,6 +168,8 @@ claude-code-manager/
 - **Git:** `git_status(cwd)` (branch e `git diff-index --numstat HEAD`), `worktree_plan` (só calcula: pasta, branch, base), `worktree_create` (recalcula o plano no backend, cria e abre a sessão), `worktree_list`, `worktree_remove` (recusa o principal, worktree com alterações pendentes ou com sessão aberta; nunca `--force`), `open_vscode` (avisa se a branch da pasta difere da sessão, sem checkout), `open_finder`, `open_pr` (PR do transcript → `gh pr view` → URL de compare; nunca cria PR nem faz push).
 - **Anexos:** `attachment_save` (bytes crus no corpo da requisição), `attachment_import(path)`, `attachment_preview(id)`, `attachment_open(id)`, `attachment_remove(id)`, `attachments_usage`, `attachments_clear`.
 - **Links:** `open_link(url)`.
+- **Modo Jarvis:** `jarvis_open`, `jarvis_close`, `jarvis_focus_session(key)` e `jarvis_new_session` (fecham o modo e passam a vez para a janela principal), `jarvis_shape_rules`, `jarvis_mock_data` (só em desenvolvimento).
+- **Repouso:** `repouso_prepare` (atraso da senha lido com `sysadminctl -screenLock status` e a escolha lembrada), `repouso_activate(showDetails)`, `repouso_unlock` (espera a resposta do sistema fora do runtime async), `repouso_state`.
 - **App:** `settings_get`, `settings_update`, `layout_get`/`layout_set` (larguras da barra lateral e do painel do foco), `grid_order_get`/`grid_order_set`, `recent_dirs`, `app_info` (ClaudeGauge, notificações efetivas, hooks ativos), `take_notified_session` (ao ativar o app depois de uma notificação, abre a sessão dela).
 
 **Eventos (`emit`).**
@@ -181,6 +186,9 @@ claude-code-manager/
 | `library:changed` | A biblioteca de sessões mudou |
 | `library:progress` | Progresso da varredura inicial |
 | `needs-you:count` | Mudou o número de sessões que precisam de você |
+| `session:action` | A ação atual de uma sessão do app mudou; só a janela do Jarvis escuta, e ela aplica no máximo 4 atualizações por segundo |
+| `repouso:changed` | O Repouso ligou, desligou ou mudou de estado |
+| `app:new-session` | O Modo Jarvis pediu o diálogo de nova sessão |
 
 A saída do terminal vai por `tauri::ipc::Channel` binário, e só enquanto o xterm está montado.
 
@@ -221,6 +229,7 @@ SQLite em `~/Library/Application Support/ClaudeCodeManager/ccm.sqlite`. O cache 
 
 - **`npm test`:** roda `cargo test --workspace`, `svelte-check` e `vitest`.
 - **CI:** a cada push, `npm test` no macOS 14, no Ubuntu 22.04 x64 e no Ubuntu 22.04 arm64.
+- **Isolamento do Modo Jarvis:** `scripts/check-jarvis-isolation.mjs` percorre, no manifest do build, tudo o que a janela principal pode carregar e falha se encontrar código do Jarvis ou da tela de bloqueio.
 - **`golden_rules.rs`:** cria um HOME temporário com `~/.claude` populado e em modo somente leitura, exercita o app e confirma que nenhum arquivo ali mudou.
 - **Testes de fluxo:** usam o `fake-claude` para cobrir nova sessão, retomada, status via hooks, hibernação, encerramento (inclusive o SIGKILL de um processo que ignora o SIGHUP) e o envio com imagens. Como o CLI real, o `fake-claude` lê tecla a tecla, ativa a colagem entre colchetes e troca cada caminho de imagem colado por `[Image #n]`.
 - **Git:** os testes rodam em repositórios temporários e conferem que consultas não alteram `.git/index` e que nenhuma operação muda a branch do checkout principal.

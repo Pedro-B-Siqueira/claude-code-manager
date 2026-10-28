@@ -32,6 +32,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     pid: null,
     exited: false,
     startedAt: 0,
+    action: null,
+    lastActivityAt: null,
   },
   {
     key: 'mock-2',
@@ -55,6 +57,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     pid: null,
     exited: false,
     startedAt: 0,
+    action: null,
+    lastActivityAt: null,
   },
   {
     key: 'mock-3',
@@ -81,6 +85,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     pid: null,
     exited: false,
     startedAt: 0,
+    action: null,
+    lastActivityAt: null,
   },
   {
     key: 'mock-4',
@@ -104,6 +110,8 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     pid: null,
     exited: false,
     startedAt: 0,
+    action: null,
+    lastActivityAt: null,
   },
   {
     key: 'mock-5',
@@ -127,5 +135,7 @@ export const MOCK_LIVE_SESSIONS: LiveSessionView[] = [
     pid: null,
     exited: false,
     startedAt: 0,
+    action: null,
+    lastActivityAt: null,
   },
 ];

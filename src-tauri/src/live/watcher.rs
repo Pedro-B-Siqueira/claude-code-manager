@@ -24,6 +24,14 @@ fn fingerprint(claude_home: &Path) -> Vec<(u32, String, i64)> {
         .collect()
 }
 
+/// Without a file watcher (the registry folder does not exist yet) the channel is disconnected and
+/// would return at once; sleeping keeps the liveness check at its normal pace instead of spinning.
+fn wait_for_change<T>(receiver: &mpsc::Receiver<T>, interval: Duration) {
+    if let Err(mpsc::RecvTimeoutError::Disconnected) = receiver.recv_timeout(interval) {
+        thread::sleep(interval);
+    }
+}
+
 pub fn start(claude_home: &Path, notify: ChangeNotifier) {
     let claude_home = claude_home.to_path_buf();
     let spawned = thread::Builder::new().name("registry-watcher".to_owned()).spawn(move || {
@@ -35,7 +43,7 @@ pub fn start(claude_home: &Path, notify: ChangeNotifier) {
         });
         let mut last = fingerprint(&claude_home);
         loop {
-            let _ = receiver.recv_timeout(LIVENESS_INTERVAL);
+            wait_for_change(&receiver, LIVENESS_INTERVAL);
             let current = fingerprint(&claude_home);
             if current != last {
                 last = current;
@@ -45,5 +53,30 @@ pub fn start(claude_home: &Path, notify: ChangeNotifier) {
     });
     if let Err(error) = spawned {
         log::warn!("falha ao observar sessões externas: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use super::*;
+
+    #[test]
+    fn waits_the_whole_interval_when_nothing_can_signal_a_change() {
+        let (sender, receiver) = mpsc::channel::<()>();
+        drop(sender);
+        let started = Instant::now();
+        wait_for_change(&receiver, Duration::from_millis(60));
+        assert!(started.elapsed() >= Duration::from_millis(60), "a folder that cannot be watched must not turn into a busy loop");
+    }
+
+    #[test]
+    fn returns_as_soon_as_a_change_arrives() {
+        let (sender, receiver) = mpsc::channel::<()>();
+        sender.send(()).unwrap();
+        let started = Instant::now();
+        wait_for_change(&receiver, Duration::from_secs(5));
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 }

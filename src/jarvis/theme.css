@@ -1,0 +1,25 @@
+/* Hologram palette from the design. Status colors are fixed: blue and orange also differ in luminance. */
+:root {
+  --jarvis-bg: #0a0c10;
+  --jarvis-balloon-bg: #1a1f29;
+  --jarvis-balloon-border: #3d475c;
+  --jarvis-selected: #3377ff;
+  --jarvis-text: #e6e6e6;
+  --jarvis-muted: #b3b3b3;
+  --jarvis-structure: #6699ff;
+  --jarvis-working: #3d99e9;
+  --jarvis-waiting: #ff9800;
+  --jarvis-done: #24b787;
+  --jarvis-idle: #9e9e9e;
+}
+
+/* The app's buttons and dialogs keep their shape and type but take the hologram's dark surfaces. */
+:root,
+:root[data-theme='dark'] {
+  --bg: var(--jarvis-bg);
+  --surface: #12161e;
+  --surface-2: var(--jarvis-balloon-bg);
+  --border: var(--jarvis-balloon-border);
+  --text: var(--jarvis-text);
+  --muted: var(--jarvis-muted);
+}

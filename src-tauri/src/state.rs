@@ -10,6 +10,8 @@ use crate::library::service::SharedProgress;
 use crate::notifications::NotificationCenter;
 use crate::paths::AppPaths;
 use crate::pty::PtyManager;
+use crate::repouso::AppRepouso;
+use crate::sessions::action::ActionTracker;
 use crate::shell_env::ShellEnvironment;
 use crate::status::StatusTracker;
 use crate::tray::TrayUpdater;
@@ -25,9 +27,13 @@ pub struct AppState {
     /// Set once the local hook server is up; without it sessions run without `--settings`.
     pub hook_settings_file: OnceLock<PathBuf>,
     pub status: StatusTracker,
+    /// What each session opened here is doing now, from the same hook events.
+    pub actions: ActionTracker,
     pub notifications: NotificationCenter,
     pub tray: OnceLock<TrayUpdater>,
     pub attachments: AttachmentStore,
+    /// Set up once the app handle exists (the platform needs it to manage windows).
+    pub repouso: OnceLock<Arc<AppRepouso>>,
 }
 
 impl AppState {
@@ -38,6 +44,11 @@ impl AppState {
 
     pub fn git(&self) -> crate::git::Git {
         crate::git::Git::new(self.shell().find_binary("git").unwrap_or_else(|| PathBuf::from("/usr/bin/git")))
+    }
+
+    /// While Repouso is on, nothing may close, quit, hide Jarvis or show the main window.
+    pub fn is_locked(&self) -> bool {
+        self.repouso.get().is_some_and(|repouso| repouso.is_locked())
     }
 
     pub fn claudegauge(&self) -> ClaudeGaugeStatus {

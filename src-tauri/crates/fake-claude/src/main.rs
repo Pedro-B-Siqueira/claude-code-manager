@@ -1,7 +1,8 @@
 //! Stand-in for the real `claude` CLI, selected through `CCM_CLAUDE_BIN`. Automated tests use it so
 //! they never spend quota. It echoes what is typed and, when given `--settings`, calls the HTTP
 //! hooks declared there the way Claude Code does:
-//! - start → `SessionStart`; a line → `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`;
+//! - start → `SessionStart`; a line → `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop` (with
+//!   the echoed line as the last line of `last_assistant_message`);
 //! - `perm <command>` → `PermissionRequest` + `Notification` (permission_prompt);
 //! - `/exit` or end of input → `SessionEnd`.
 
@@ -239,7 +240,7 @@ fn main() {
                 hooks.send("PostToolUse", json!({ "tool_name": "Read" }));
                 let _ = writeln!(stdout, "> {line}");
                 let _ = stdout.flush();
-                hooks.send("Stop", json!({}));
+                hooks.send("Stop", json!({ "last_assistant_message": format!("Feito.\n> {line}") }));
             }
         }
     }

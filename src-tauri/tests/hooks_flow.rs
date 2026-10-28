@@ -14,6 +14,7 @@ use ccm_lib::hooks::server::{HookEvent, HookServer};
 use ccm_lib::hooks::settings_file::{SESSION_ENV, TOKEN_ENV, hook_settings};
 use ccm_lib::hooks::tokens::TokenRegistry;
 use ccm_lib::pty::{CommandLine, LaunchMode, LaunchSpec, OutputSink, PtyManager, SpawnRequest};
+use ccm_lib::sessions::action::{ActionKind, ActionTracker};
 use ccm_lib::shell_env::shell_quote;
 use ccm_lib::status::{SessionStatus, StatusTracker, status_for_hook};
 use support::fake_claude_binary;
@@ -124,25 +125,9 @@ impl OutputSink for CollectingSink {
 #[test]
 fn fake_claude_reports_status_through_injected_hooks() {
     let recorder = start_server();
-    let workdir = tempfile::tempdir().unwrap();
-    let settings_file = workdir.path().join("hooks.json");
-    std::fs::write(&settings_file, hook_settings(recorder.server.port()).to_string()).unwrap();
     let key = "hooked-session";
-    let token = recorder.tokens.issue(key);
-
+    let session = launch_fake_claude(&recorder, key);
     let tracker = Arc::new(StatusTracker::default());
-    let script = format!(
-        "{} --session-id {key} --settings {}; exec /bin/sh",
-        shell_quote(&fake_claude_binary().to_string_lossy()),
-        shell_quote(&settings_file.to_string_lossy())
-    );
-    let manager = PtyManager::new(Arc::new(|_| {}));
-    let launch = LaunchSpec { session_id: key.to_owned(), cwd: workdir.path().to_path_buf(), mode: LaunchMode::New, worktree: None };
-    let env = vec![(TOKEN_ENV.to_owned(), token), (SESSION_ENV.to_owned(), key.to_owned())];
-    let command = CommandLine { program: PathBuf::from("/bin/sh"), args: vec!["-c".to_owned(), script], env, env_remove: vec![] };
-    manager.spawn(SpawnRequest { key: key.to_owned(), launch, command, scrollback_lines: 500 }).unwrap();
-    let output = CollectingSink::default();
-    manager.attach(key, Box::new(output.clone())).unwrap();
 
     let events = Arc::clone(&recorder.events);
     let statuses = |tracker: &StatusTracker| {
@@ -155,13 +140,75 @@ fn fake_claude_reports_status_through_injected_hooks() {
     };
 
     wait_until("SessionStart", || statuses(&tracker).is_some_and(|current| current.status == SessionStatus::Idle));
-    manager.write(key, b"perm npm publish\n").unwrap();
+    session.manager.write(key, b"perm npm publish\n").unwrap();
     wait_until("permission", || {
         statuses(&tracker).is_some_and(|current| current.status == SessionStatus::Permission && current.detail.as_deref() == Some("$ npm publish"))
     });
-    manager.write(key, b"hello\n").unwrap();
+    session.manager.write(key, b"hello\n").unwrap();
     wait_until("turn finished", || statuses(&tracker).is_some_and(|current| current.status == SessionStatus::Done));
-    let text = String::from_utf8_lossy(&output.0.lock().unwrap()).into_owned();
+    let text = String::from_utf8_lossy(&session.output.0.lock().unwrap()).into_owned();
     assert!(text.contains("> hello"));
-    manager.close(key, Duration::from_millis(300)).unwrap();
+    session.manager.close(key, Duration::from_millis(300)).unwrap();
+}
+
+#[test]
+fn fake_claude_reports_its_current_action_through_injected_hooks() {
+    let recorder = start_server();
+    let key = "acting-session";
+    let session = launch_fake_claude(&recorder, key);
+    let tracker = ActionTracker::default();
+    let changes: Mutex<Vec<(ActionKind, String)>> = Mutex::default();
+    let events = Arc::clone(&recorder.events);
+    let drain = || {
+        for event in events.lock().unwrap().drain(..) {
+            if let Some(update) = tracker.record(&event.session_key, &event.payload, 0) {
+                if let Some(action) = update.action {
+                    changes.lock().unwrap().push((action.kind, action.text));
+                }
+            }
+        }
+    };
+
+    wait_until("SessionStart", || {
+        drain();
+        tracker.current(key).is_some()
+    });
+    session.manager.write(key, b"hello\n").unwrap();
+    wait_until("answer", || {
+        drain();
+        changes.lock().unwrap().iter().any(|(kind, _)| *kind == ActionKind::Result)
+    });
+    assert_eq!(
+        *changes.lock().unwrap(),
+        vec![(ActionKind::Tool, "Read · README.md".to_owned()), (ActionKind::Result, "> hello".to_owned())],
+        "the tool of PreToolUse first, then the last line of the answer that Stop carries"
+    );
+    session.manager.close(key, Duration::from_millis(300)).unwrap();
+}
+
+struct FakeSession {
+    manager: PtyManager,
+    output: CollectingSink,
+    _workdir: tempfile::TempDir,
+}
+
+/// Runs the fake `claude` in a PTY with the app's hook settings and session token, like the app does.
+fn launch_fake_claude(recorder: &Recorder, key: &str) -> FakeSession {
+    let workdir = tempfile::tempdir().unwrap();
+    let settings_file = workdir.path().join("hooks.json");
+    std::fs::write(&settings_file, hook_settings(recorder.server.port()).to_string()).unwrap();
+    let token = recorder.tokens.issue(key);
+    let script = format!(
+        "{} --session-id {key} --settings {}; exec /bin/sh",
+        shell_quote(&fake_claude_binary().to_string_lossy()),
+        shell_quote(&settings_file.to_string_lossy())
+    );
+    let manager = PtyManager::new(Arc::new(|_| {}));
+    let launch = LaunchSpec { session_id: key.to_owned(), cwd: workdir.path().to_path_buf(), mode: LaunchMode::New, worktree: None };
+    let env = vec![(TOKEN_ENV.to_owned(), token), (SESSION_ENV.to_owned(), key.to_owned())];
+    let command = CommandLine { program: PathBuf::from("/bin/sh"), args: vec!["-c".to_owned(), script], env, env_remove: vec![] };
+    manager.spawn(SpawnRequest { key: key.to_owned(), launch, command, scrollback_lines: 500 }).unwrap();
+    let output = CollectingSink::default();
+    manager.attach(key, Box::new(output.clone())).unwrap();
+    FakeSession { manager, output, _workdir: workdir }
 }

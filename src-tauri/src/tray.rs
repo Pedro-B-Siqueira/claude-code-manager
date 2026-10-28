@@ -119,6 +119,10 @@ fn build_menu(app: &AppHandle, views: &[LiveSessionView]) -> tauri::Result<Menu<
 }
 
 pub fn show_main_window(app: &AppHandle) {
+    // The main window gives access to the terminals; Repouso keeps it hidden.
+    if app.try_state::<crate::state::AppState>().is_some_and(|state| state.is_locked()) {
+        return;
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -225,6 +229,8 @@ mod tests {
             pinned: false,
             exited,
             started_at,
+            action: None,
+            last_activity_at: None,
         }
     }
 

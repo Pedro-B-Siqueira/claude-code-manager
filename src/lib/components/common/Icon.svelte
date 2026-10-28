@@ -25,7 +25,10 @@
     | 'warning'
     | 'terminal'
     | 'pullRequest'
-    | 'settings';
+    | 'settings'
+    | 'sparkle'
+    | 'lock'
+    | 'exit';
 
   const ICON_PATHS: Record<IconName, string> = {
     plus: 'M12 5v14M5 12h14',
@@ -54,6 +57,9 @@
     terminal: 'M4 5h16v14H4ZM8 10l3 2-3 2M13 15h3',
     settings: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6',
     pullRequest: 'M6 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM6 7v14M18 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4ZM18 17V9a3 3 0 0 0-3-3h-4M13 4l-2 2 2 2',
+    sparkle: 'M11 3l1.8 5.2L18 10l-5.2 1.8L11 17l-1.8-5.2L4 10l5.2-1.8ZM18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8Z',
+    lock: 'M6 11h12v9H6ZM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 15v2',
+    exit: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
   };
 </script>
 

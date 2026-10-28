@@ -226,3 +226,8 @@ export function openLink(url: string): Promise<void> {
 export function deleteSession(sessionId: string): Promise<void> {
   return invoke<void>('library_delete', { sessionId });
 }
+
+/** Opens the Jarvis mode in its own full-screen window (created now, destroyed on exit). */
+export function openJarvis(): Promise<void> {
+  return invoke<void>('jarvis_open');
+}

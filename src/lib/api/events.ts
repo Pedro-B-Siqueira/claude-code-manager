@@ -38,3 +38,8 @@ export function onCloseRequested(handler: (runningSessions: number) => void): Pr
 export function onTrayFocusSession(handler: (key: string) => void): Promise<UnlistenFn> {
   return listen<string>('tray:focus-session', (event) => handler(event.payload));
 }
+
+/** Another window (the Jarvis mode) asked for the new-session dialog. */
+export function onNewSessionRequested(handler: () => void): Promise<UnlistenFn> {
+  return listen<null>('app:new-session', () => handler());
+}
