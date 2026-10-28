@@ -25,6 +25,8 @@ pub enum AppError {
     ClaudeNotFound,
     #[error("git: {0}")]
     Git(String),
+    #[error("janela: {0}")]
+    Window(String),
     #[error("{0}")]
     Invalid(String),
 }
@@ -42,6 +44,7 @@ impl AppError {
             Self::Terminal(_) => "terminal",
             Self::ClaudeNotFound => "claudeNotFound",
             Self::Git(_) => "git",
+            Self::Window(_) => "window",
             Self::Invalid(_) => "invalid",
         }
     }

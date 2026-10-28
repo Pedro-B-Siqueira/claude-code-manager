@@ -11,6 +11,7 @@ use crate::library::models::SessionSummary;
 use crate::library::{project, queries};
 use crate::live::registry::{ExternalSession, RegistryStatus};
 use crate::pty::{LaunchMode, SessionSnapshot, now_ms};
+use crate::sessions::action::{ActionKind, SessionAction, file_name, labeled_tool, question_line, result_line};
 use crate::status::{DONE_TO_IDLE_MS, SessionStatus, StatusUpdate};
 
 /// Without hook data, recent terminal output is the only sign that an app session is working.
@@ -59,6 +60,41 @@ pub struct LiveSessionView {
     pub pinned: bool,
     pub exited: bool,
     pub started_at: i64,
+    /// What the agent is doing now (Jarvis balloons); the cards do not show it.
+    pub action: Option<SessionAction>,
+    pub last_activity_at: Option<i64>,
+}
+
+/// The latest tool call recorded in the transcript, for sessions that send no hook events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LastTool {
+    pub tool: String,
+    pub target: Option<String>,
+}
+
+/// Tools whose activity target is a file path; for the rest it is a command, pattern or URL.
+const FILE_TOOLS: [&str; 5] = ["Edit", "Write", "MultiEdit", "Read", "NotebookEdit"];
+
+pub fn transcript_action(status: SessionStatus, last_reply: Option<&str>, last_tool: Option<&LastTool>) -> Option<SessionAction> {
+    match status {
+        SessionStatus::Working => last_tool.map(|last| {
+            let target = last.target.as_deref().map(|target| if FILE_TOOLS.contains(&last.tool.as_str()) { file_name(target) } else { target });
+            labeled_tool(&last.tool, target)
+        }),
+        SessionStatus::Waiting => last_reply.and_then(question_line).map(|line| SessionAction::new(ActionKind::Question, &line)),
+        SessionStatus::Done | SessionStatus::Idle => last_reply.and_then(result_line).map(|line| SessionAction::new(ActionKind::Result, &line)),
+        SessionStatus::Permission => None,
+    }
+}
+
+fn last_tool(connection: &Connection, session_id: &str) -> Result<Option<LastTool>, AppError> {
+    Ok(connection
+        .query_row(
+            "SELECT tool, target FROM activity WHERE session_id = ?1 AND kind IN ('tool', 'edit') AND tool IS NOT NULL ORDER BY id DESC LIMIT 1",
+            params![session_id],
+            |row| Ok(LastTool { tool: row.get(0)?, target: row.get(1)? }),
+        )
+        .optional()?)
 }
 
 struct ProjectFacts {
@@ -87,15 +123,32 @@ struct ConversationFacts {
     summary: Option<SessionSummary>,
     project: ProjectFacts,
     cwd: String,
+    last_tool: Option<LastTool>,
 }
 
 impl ConversationFacts {
     fn load(connection: &Connection, session_id: &str, cwd: &str) -> Result<Self, AppError> {
         let summary = queries::session_summary(connection, session_id)?;
-        Ok(Self { project: project_facts(connection, cwd)?, summary, cwd: cwd.to_owned() })
+        Ok(Self { project: project_facts(connection, cwd)?, summary, cwd: cwd.to_owned(), last_tool: last_tool(connection, session_id)? })
+    }
+
+    /// Hook events win; without them the transcript tells what the session did last.
+    fn activity(&self, base: &ViewBase) -> (Option<SessionAction>, Option<i64>) {
+        if base.hibernated || base.exited {
+            return (None, None);
+        }
+        let summary = self.summary.as_ref();
+        match &base.hook_activity {
+            Some((action, at)) => (action.clone(), Some(*at)),
+            None => (
+                transcript_action(base.status.status, summary.and_then(|summary| summary.last_assistant.as_deref()), self.last_tool.as_ref()),
+                summary.and_then(|summary| summary.item.updated_at),
+            ),
+        }
     }
 
     fn view(self, base: ViewBase) -> LiveSessionView {
+        let (action, last_activity_at) = self.activity(&base);
         let summary = self.summary.as_ref();
         LiveSessionView {
             key: base.key,
@@ -118,6 +171,8 @@ impl ConversationFacts {
             pinned: summary.is_some_and(|summary| summary.item.pinned),
             exited: base.exited,
             started_at: base.started_at,
+            action,
+            last_activity_at,
             cwd: self.cwd,
         }
     }
@@ -135,6 +190,8 @@ struct ViewBase {
     hibernated: bool,
     exited: bool,
     started_at: i64,
+    /// Action and time from hook events; None for sessions that send none.
+    hook_activity: Option<(Option<SessionAction>, i64)>,
 }
 
 fn interim_status(snapshot: &SessionSnapshot) -> StatusUpdate {
@@ -152,6 +209,7 @@ pub fn build_app_view(
     connection: &Connection,
     snapshot: &SessionSnapshot,
     hook_status: Option<StatusUpdate>,
+    hook_activity: Option<(Option<SessionAction>, i64)>,
     memory_mb: Option<f64>,
 ) -> Result<LiveSessionView, AppError> {
     let cwd = snapshot.launch.cwd.to_string_lossy().into_owned();
@@ -178,6 +236,7 @@ pub fn build_app_view(
         hibernated: snapshot.hibernated,
         exited: snapshot.exited && !snapshot.hibernated,
         started_at: snapshot.started_at,
+        hook_activity,
     }))
 }
 
@@ -206,6 +265,7 @@ pub fn build_external_view(connection: &Connection, session: &ExternalSession, m
         hibernated: false,
         exited: false,
         started_at,
+        hook_activity: None,
     }))
 }
 
@@ -232,6 +292,49 @@ mod tests {
 
     fn external(status: RegistryStatus, updated_at: i64) -> ExternalSession {
         ExternalSession { pid: 10, session_id: "s".to_owned(), cwd: "/r".to_owned(), status, status_updated_at: updated_at }
+    }
+
+    fn tool(name: &str, target: &str) -> Option<LastTool> {
+        Some(LastTool { tool: name.to_owned(), target: Some(target.to_owned()) })
+    }
+
+    fn action_text(action: Option<SessionAction>) -> Option<(ActionKind, String)> {
+        action.map(|action| (action.kind, action.text))
+    }
+
+    #[test]
+    fn transcripts_give_working_sessions_their_last_tool() {
+        let edit = transcript_action(SessionStatus::Working, None, tool("Edit", "/repo/src/a.component.ts").as_ref());
+        assert_eq!(action_text(edit), Some((ActionKind::Tool, "Edit · a.component.ts".to_owned())));
+        let shell = transcript_action(SessionStatus::Working, None, tool("Bash", "cat /etc/hosts").as_ref());
+        assert_eq!(action_text(shell), Some((ActionKind::Tool, "Bash · cat /etc/hosts".to_owned())));
+    }
+
+    #[test]
+    fn transcripts_give_finished_and_waiting_sessions_a_line_of_the_last_answer() {
+        let reply = Some("Rodei tudo.\nPosso abrir o PR?\nFico no aguardo.");
+        assert_eq!(action_text(transcript_action(SessionStatus::Done, reply, None)), Some((ActionKind::Result, "Fico no aguardo.".to_owned())));
+        assert_eq!(action_text(transcript_action(SessionStatus::Waiting, reply, None)), Some((ActionKind::Question, "Posso abrir o PR?".to_owned())));
+        assert_eq!(action_text(transcript_action(SessionStatus::Idle, reply, None)), Some((ActionKind::Result, "Fico no aguardo.".to_owned())));
+        assert_eq!(transcript_action(SessionStatus::Permission, reply, None), None);
+        assert_eq!(transcript_action(SessionStatus::Working, None, None), None);
+    }
+
+    #[test]
+    fn the_last_tool_includes_edits_and_skips_prompts() {
+        let database = crate::db::Database::open_in_memory().unwrap();
+        let connection = database.connection();
+        connection
+            .execute_batch(
+                "INSERT INTO activity (session_id, kind, tool, target) VALUES
+                    ('s', 'tool', 'Bash', 'npm test'),
+                    ('s', 'edit', 'Edit', '/repo/a.ts'),
+                    ('s', 'prompt', NULL, 'next step'),
+                    ('other', 'tool', 'Read', 'b.ts');",
+            )
+            .unwrap();
+        assert_eq!(last_tool(&connection, "s").unwrap(), tool("Edit", "/repo/a.ts"));
+        assert_eq!(last_tool(&connection, "missing").unwrap(), None);
     }
 
     #[test]

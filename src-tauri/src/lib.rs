@@ -7,6 +7,7 @@ pub mod error;
 pub mod git;
 pub mod hibernation;
 pub mod hooks;
+pub mod jarvis;
 pub mod layout;
 pub mod library;
 pub mod links;
@@ -16,6 +17,7 @@ pub mod paths;
 pub mod platform;
 pub mod pricing;
 pub mod pty;
+pub mod repouso;
 pub mod sessions;
 pub mod settings;
 pub mod shell_env;
@@ -42,6 +44,7 @@ use crate::notifications::NotificationCenter;
 use crate::paths::AppPaths;
 use crate::pty::{PtyEvent, PtyManager, PtyNotifier, now_ms};
 use crate::state::AppState;
+use crate::sessions::action::ActionTracker;
 use crate::status::StatusTracker;
 
 pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppState, AppError> {
@@ -60,9 +63,11 @@ pub fn build_state(paths: AppPaths, pty_notifier: PtyNotifier) -> Result<AppStat
         hook_tokens: Arc::new(TokenRegistry::default()),
         hook_settings_file: OnceLock::new(),
         status: StatusTracker::default(),
+        actions: ActionTracker::default(),
         notifications: NotificationCenter::default(),
         tray: OnceLock::new(),
         attachments,
+        repouso: OnceLock::new(),
     })
 }
 
@@ -124,6 +129,10 @@ fn pty_notifier(app: AppHandle) -> PtyNotifier {
 fn hook_handler(app: AppHandle) -> HookHandler {
     Arc::new(move |event: HookEvent| {
         let Some(state) = app.try_state::<AppState>() else { return };
+        // Only the Jarvis window listens: the main window does no extra work per tool call.
+        if let Some(action) = state.actions.record(&event.session_key, &event.payload, now_ms()) {
+            emit_or_log(&app, "session:action", action);
+        }
         let Some(update) = status::status_for_hook(&event.payload) else { return };
         let Some(transition) = state.status.apply(&event.session_key, update, now_ms()) else { return };
         emit_or_log(&app, "session:status", transition.clone());
@@ -188,7 +197,7 @@ fn needs_quit_confirmation(app: &AppHandle) -> bool {
 
 /// "Sair" from the menu bar: same confirmation as ⌘Q when something is still working.
 fn request_quit(app: &AppHandle) {
-    if needs_quit_confirmation(app) {
+    if app.state::<AppState>().is_locked() || needs_quit_confirmation(app) {
         return;
     }
     let state = app.state::<AppState>();
@@ -206,9 +215,19 @@ fn log_plugin(paths: &AppPaths) -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
+/// A pending file means the app died while locked; the system already undid the rest.
+fn clean_up_repouso(app_support: &std::path::Path) {
+    let leftover = repouso::pending::clean_up_after_crash(app_support, repouso::helpers::is_watchdog, repouso::helpers::stop_process);
+    if let Some(pending) = leftover {
+        log::warn!("o app fechou durante o Repouso (desde {}); estado pendente removido", pending.since);
+    }
+}
+
 fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error::Error>> {
     let handle = app.handle().clone();
     let state = build_state(paths, pty_notifier(handle.clone()))?;
+    clean_up_repouso(state.paths.app_support());
+    let _ = state.repouso.set(Arc::new(repouso::lock::Repouso::new(repouso::platform::AppLockPlatform::new(handle.clone(), state.paths.app_support().to_path_buf()))));
     attachments::start_pruning(state.attachments.clone());
     service::start(&state.paths, state.library_progress.clone(), library_notifier(handle.clone()))?;
     start_hooks(&handle, &state);
@@ -224,6 +243,8 @@ fn setup(app: &mut tauri::App, paths: AppPaths) -> Result<(), Box<dyn std::error
         }
         Err(error) => log::warn!("ícone da barra de menus indisponível: {error}"),
     }
+    jarvis::start_measure_schedule(&handle);
+    commands::repouso::start_dev_autolock(&handle);
     std::thread::spawn(move || {
         handle.state::<AppState>().shell();
     });
@@ -247,7 +268,12 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                if tray::hides_on_close(platform::CURRENT) {
+                if window.app_handle().state::<AppState>().is_locked() {
+                    return;
+                }
+                if window.label() == jarvis::WINDOW_LABEL {
+                    jarvis::close(window.app_handle());
+                } else if tray::hides_on_close(platform::CURRENT) {
                     let _ = window.hide();
                 } else {
                     request_quit(window.app_handle());
@@ -298,6 +324,16 @@ pub fn run() {
             commands::sessions::session_submit_with_images,
             commands::sessions::ui_set_visible,
             commands::dev::dev_scenario,
+            commands::jarvis::jarvis_open,
+            commands::jarvis::jarvis_close,
+            commands::jarvis::jarvis_focus_session,
+            commands::jarvis::jarvis_new_session,
+            commands::jarvis::jarvis_shape_rules,
+            commands::jarvis::jarvis_mock_data,
+            commands::repouso::repouso_prepare,
+            commands::repouso::repouso_activate,
+            commands::repouso::repouso_unlock,
+            commands::repouso::repouso_state,
             commands::git::git_status,
             commands::git::worktree_plan,
             commands::git::worktree_create,
@@ -314,7 +350,7 @@ pub fn run() {
             std::process::exit(1);
         })
         .run(|app, event| match event {
-            RunEvent::ExitRequested { api, .. } if needs_quit_confirmation(app) => api.prevent_exit(),
+            RunEvent::ExitRequested { api, .. } if app.state::<AppState>().is_locked() || needs_quit_confirmation(app) => api.prevent_exit(),
             RunEvent::Exit => app.state::<AppState>().pty.shutdown_all(Duration::from_secs(2)),
             // Clicking the Dock icon; Linux has no equivalent event.
             #[cfg(target_os = "macos")]

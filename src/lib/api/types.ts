@@ -56,6 +56,23 @@ export interface LiveSessionView {
   pinned: boolean;
   exited: boolean;
   startedAt: number;
+  /** What the agent is doing now (Jarvis balloons); the cards do not show it. */
+  action: SessionAction | null;
+  lastActivityAt: number | null;
+}
+
+export type ActionKind = 'tool' | 'permission' | 'question' | 'result';
+
+export interface SessionAction {
+  kind: ActionKind;
+  text: string;
+}
+
+/** `session:action`: a session's current action changed. */
+export interface ActionUpdate {
+  key: string;
+  action: SessionAction | null;
+  lastActivityAt: number;
 }
 
 export interface ClaudeGaugeStatus {

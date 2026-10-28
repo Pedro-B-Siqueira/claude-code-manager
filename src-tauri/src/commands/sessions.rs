@@ -91,6 +91,7 @@ pub async fn session_close(state: State<'_, AppState>, app: AppHandle, key: Stri
     state.pty.close(&key, CLOSE_GRACE)?;
     if !was_running {
         state.status.forget(&key);
+        state.actions.forget(&key);
     }
     notify_live_changed(&app);
     Ok(())
@@ -172,6 +173,7 @@ fn wake(state: &AppState, app: &AppHandle, key: &str) -> Result<LiveSessionView,
     let spec = LaunchSpec { mode: LaunchMode::Resume, ..snapshot.launch };
     let view = launch_with_key(state, app, spec, key.to_owned())?;
     state.status.forget(key);
+    state.actions.forget(key);
     Ok(view)
 }
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "jarvis",
+  "description": "Permissoes da janela do Modo Jarvis: ouvir eventos do app e registrar avisos no log",
+  "windows": [
+    "jarvis"
+  ],
+  "permissions": [
+    "core:event:default",
+    "log:default"
+  ]
+}

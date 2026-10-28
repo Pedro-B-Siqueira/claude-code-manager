@@ -23,7 +23,7 @@ pub fn live_views(state: &AppState) -> Result<Vec<LiveSessionView>, AppError> {
     let mut views = Vec::with_capacity(snapshots.len());
     for snapshot in &snapshots {
         let memory = snapshot.pid.and_then(|pid| table.tree_rss_mb(pid));
-        views.push(build_app_view(&connection, snapshot, state.status.current(&snapshot.key, now), memory)?);
+        views.push(build_app_view(&connection, snapshot, state.status.current(&snapshot.key, now), state.actions.current(&snapshot.key), memory)?);
     }
     for session in external_sessions(state, &connection, &table, &snapshots)? {
         views.push(build_external_view(&connection, &session, table.tree_rss_mb(session.pid))?);

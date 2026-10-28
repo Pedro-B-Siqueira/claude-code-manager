@@ -1,0 +1,70 @@
+@import '../lib/theme/fonts.css';
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #0a0a0a;
+  color: #e6e6e6;
+  font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  text-align: center;
+}
+
+.icon {
+  width: 34px;
+  height: 34px;
+  fill: none;
+  stroke: #b3b3b3;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.clock {
+  margin: 0;
+  font-size: 48px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #b3b3b3;
+  font-size: 14px;
+}
+
+.waiting {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(255 152 0 / 0.16);
+  color: #ff9800;
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: #b3b3b3;
+  font-size: 12.5px;
+}

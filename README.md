@@ -58,6 +58,12 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ![Tema claro](docs/images/grade-claro.png)
 
+**Modo Jarvis (⌘J).** Uma tela cheia com as sessões abertas num holograma 3D que dá para girar. Cada repositório vira uma forma de arame, na cor da sessão mais urgente dele, e cada sessão é um satélite com um balão dizendo o que o agente está fazendo agora: a ferramenta e o arquivo da última ação, a pergunta que ele fez ou a última linha da resposta. Clicar num balão gira o projeto para a frente e mostra a branch, os dois últimos eventos e um atalho para abrir a sessão. Esc fecha. O modo abre numa janela própria, criada na hora e destruída ao sair, então nada dele fica carregado enquanto está fechado.
+
+![Modo Jarvis com quatro sessões em três projetos](docs/images/jarvis.png)
+
+**Repouso (macOS).** A partir do Modo Jarvis, trava o Mac nessa tela: todas as telas ficam cobertas, o Mac não dorme e só se sai com o Touch ID ou a senha do Mac, pedidos pelo próprio sistema. As sessões continuam rodando. Serve para deixar os agentes trabalhando à vista enquanto você se afasta; os limites estão em [Repouso: o que ele protege](#repouso-o-que-ele-protege).
+
 ## O que ele não faz
 
 - Não edita código, não tem extensões e não substitui o seu editor (o botão abre o VS Code).
@@ -71,6 +77,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 - **Zero tokens.** O app nunca chama modelo nenhum nem a API da Anthropic, e não lê o token de login.
 - **Git só com confirmação.** As únicas operações que escrevem são criar e remover worktree. A remoção recusa worktrees com alterações pendentes. Nada de `checkout`, `reset`, `stash` ou `--force`.
 - **Dados locais.** Nomes, tags, ordem dos cards, índice de busca, configurações e as imagens anexadas (apagadas depois de 3 dias) ficam em `~/Library/Application Support/ClaudeCodeManager/` (no Linux, `~/.local/share/ClaudeCodeManager/`).
+- **A senha do Mac nunca passa pelo app.** O Repouso pede Touch ID ou senha pelo LocalAuthentication do macOS, que só devolve "aprovado" ou "recusado".
 
 ## Compilar a partir do código
 
@@ -99,6 +106,8 @@ Se o Rust foi instalado com `rustup --no-modify-path`, não tem problema: os scr
 | Nova sessão | ⌘N | Ctrl+Shift+N |
 | Ir para a sessão N | ⌘1…9 | Ctrl+Shift+1…9 |
 | Configurações | ⌘, | Ctrl+Shift+, |
+| Modo Jarvis | ⌘J | Ctrl+Shift+J |
+| Sair do Modo Jarvis | Esc | Esc |
 | Copiar e colar no terminal | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V |
 | Abrir link no terminal | ⌘+clique | Ctrl+clique |
 | Sair | ⌘Q | Fechar a janela, ou "Sair" no ícone da bandeja |
@@ -108,6 +117,35 @@ Sair pede confirmação se alguma sessão estiver trabalhando. No Linux, Ctrl+C 
 Sem login no Claude Code, o histórico e a busca funcionam normalmente. Ao abrir uma sessão, o próprio Claude Code pede o login no terminal embutido, como faria em qualquer terminal.
 
 Nas configurações dá para trocar o tema, a pasta e os prefixos de branch dos worktrees, o scrollback, as notificações, a hibernação e o caminho do `claude`.
+
+### Formas do Modo Jarvis
+
+Sem configuração, cada repositório vira um cristal, com uma variação que depende do nome. Para escolher a forma de um repositório, crie `jarvis-shapes.json` na pasta de dados do app (`~/Library/Application Support/ClaudeCodeManager/`):
+
+```json
+{
+  "rules": [
+    { "match": "api*", "shape": "tower" },
+    { "match": "*eye*", "shape": "eye" },
+    { "match": "mobile-app", "shape": "fortress" },
+    { "match": "*-ui", "shape": "orb" }
+  ]
+}
+```
+
+`match` compara com o nome do repositório, sem diferenciar maiúsculas, e `*` vale qualquer trecho. Vale a primeira regra que casar. As formas são `tower` (torre), `eye` (olho), `fortress` (fortaleza), `orb` (orbe) e `crystal` (cristal). Uma forma desconhecida é ignorada, e um arquivo inválido deixa tudo como cristal.
+
+## Repouso: o que ele protege
+
+O Repouso tira do alcance o que daria para fazer sem a senha: trocar de app (⌘Tab, Mission Control, cantos ativos), Forçar Encerrar, ⌘Q, ⌘H, ⌘W, ⌘M, Dock, barra de menus, menu Apple, logout e a janela principal do app, que daria acesso aos terminais. Monitores extras ficam cobertos por uma tela simples, inclusive os conectados no meio do caminho. Num teste num Mac real, nada disso deixou sair.
+
+Ele **não substitui** a tela de bloqueio do macOS:
+
+- Segurar o botão de energia desliga o Mac, e fechar a tampa ainda faz ele dormir.
+- Se o app fechar no meio do Repouso, um pequeno processo vigia (watchdog) apaga a tela na hora. A senha só é pedida se o macOS estiver em **Ajustes do Sistema → Tela Bloqueada → Exigir senha: Imediatamente**. Com um atraso maior, a área de trabalho fica acessível durante esse intervalo; o diálogo de ativação avisa quando é o caso.
+- Acesso remoto (SSH, compartilhamento de tela) não passa pelo Repouso.
+
+Nada fica permanente: desbloquear desfaz tudo, e se o app morrer, o próprio sistema desfaz o modo quiosque e a trava de sono junto com o processo. Na próxima vez que o app abre, ele apaga o arquivo de estado que ficou para trás. No Linux o Repouso não existe.
 
 ## Como funciona
 
@@ -130,6 +168,8 @@ Medido num Mac Apple Silicon com 16 GB e macOS 26.6, usando `scripts/measure-mem
 
 O que o app gasta por sessão é pouco: cerca de 0,3 MB no processo principal, uns 3 MB na interface e uns 8 MB para o shell de login. O peso de verdade é o próprio `claude`, que ocupou de 500 a 610 MB por processo na mesma máquina.
 
+**Modo Jarvis.** Fechado, ele não custa nada: a janela principal não carrega nenhum código do modo (o build confere isso), e o consumo do app ficou igual ao da versão anterior. Aberto com quatro sessões, soma cerca de 80 MB (quase tudo é o processo próprio da janela, que o WebKit cria e destrói junto com ela) e usa uns 13% de um núcleo, desenhando a no máximo 30 quadros por segundo. Sem foco, ele pausa. Depois de sair, ficam de 16 a 18 MB, quase tudo cache do processo de vídeo do WebKit, que o app não controla e que cresce cada vez menos a cada nova abertura. Medido com `scripts/measure-jarvis.sh` e sessões de teste.
+
 Por isso a hibernação vem ligada. Depois de 30 minutos ociosa (configurável), uma sessão aberta pelo app tem o processo encerrado e volta com `claude --resume` quando você a abre. Sessões trabalhando, pedindo permissão ou esperando você nunca hibernam. Além disso, só a sessão em foco tem um terminal desenhado (a grade usa uma prévia em texto), e as prévias param quando a janela está escondida.
 
 ## Desenvolvimento
@@ -140,6 +180,8 @@ Por isso a hibernação vem ligada. Depois de 30 minutos ociosa (configurável),
 | `npm run generate` | Build de produção do sistema atual |
 | `npm test` | Testes Rust, checagem de tipos e testes do frontend |
 | `scripts/measure-memory.sh` | Mede a memória do app aberto (macOS) |
+| `scripts/measure-jarvis.sh` | Mede RAM e CPU do Modo Jarvis numa cópia isolada do app (macOS) |
+| `node scripts/check-jarvis-isolation.mjs` | Depois do build, confere que a janela principal não carrega nada do Modo Jarvis |
 
 A cada push, o GitHub Actions roda `npm test` no macOS, no Ubuntu x64 e no Ubuntu arm64. Uma tag `vX.Y.Z` gera a Release, em rascunho, com o `.dmg` universal, o AppImage e o `.deb`.
 
@@ -149,13 +191,23 @@ Os testes nunca rodam o `claude` de verdade. Eles usam o `fake-claude` (`src-tau
 CCM_E2E=pty-smoke CCM_E2E_CWD=/tmp CCM_CLAUDE_BIN=$PWD/src-tauri/target/debug/fake-claude npm run dev
 ```
 
+Para o Modo Jarvis e o Repouso, builds de desenvolvimento aceitam mais algumas variáveis:
+
+| Variável | O que faz |
+|---|---|
+| `CCM_JARVIS_MOCK=1` | O Modo Jarvis mostra sessões de exemplo; com um caminho, lê as sessões de um arquivo JSON |
+| `CCM_JARVIS_MEASURE=20,110` | Abre o Modo Jarvis aos 20 s e fecha aos 110 s (pares a mais repetem o ciclo) |
+| `CCM_JARVIS_PIXEL_RATIO=1.5` | Escala do canvas do holograma, para comparar memória e CPU |
+| `CCM_REPOUSO_DEV_AUTOLOCK=10` | Ativa o Repouso sozinho 10 s depois de abrir |
+| `CCM_REPOUSO_DEV_TIMEOUT=180` | Desbloqueia sem pedir nada depois de 180 s, para um bug no desbloqueio não trancar ninguém fora |
+
 Builds de release ignoram essas variáveis.
 
 ## Versões validadas
 
 | | Versão |
 |---|---|
-| Claude Code | 2.1.295 |
+| Claude Code | 2.1.311 |
 | Tauri | 2.11 |
 | Svelte | 5.57 |
 | Rust | 1.99 |

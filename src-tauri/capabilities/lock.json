@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "lock",
+  "description": "Permissoes das janelas que cobrem as telas extras no Repouso: so ouvir eventos do app",
+  "windows": [
+    "lock-*"
+  ],
+  "permissions": [
+    "core:event:default"
+  ]
+}

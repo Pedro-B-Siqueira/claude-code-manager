@@ -4,7 +4,7 @@ resolver = "3"
 
 [package]
 name = "claude-code-manager"
-version = "0.1.2"
+version = "0.2.0"
 description = "Gerenciador leve de sessoes do Claude Code"
 edition = "2024"
 rust-version = "1.85"
@@ -40,6 +40,14 @@ tiny_http = "0.12"
 trash = "5"
 log = "0.4"
 rusqlite = { version = "0.40", features = ["bundled"] }
+
+# Repouso talks to AppKit and LocalAuthentication. Same versions tao/wry already bring in, so no new
+# code is downloaded; only the features below are compiled in addition.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSError"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSWindow"] }
+block2 = "0.6"
 
 [dev-dependencies]
 tempfile = "3"

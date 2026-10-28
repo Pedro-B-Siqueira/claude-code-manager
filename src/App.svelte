@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { onMount } from 'svelte';
-  import { quitApp, setUiVisible, takeNotifiedSession } from './lib/api/commands';
-  import { onCloseRequested, onTrayFocusSession } from './lib/api/events';
+  import { openJarvis, quitApp, setUiVisible, takeNotifiedSession } from './lib/api/commands';
+  import { onCloseRequested, onNewSessionRequested, onTrayFocusSession } from './lib/api/events';
   import type { AppSettings, LiveSessionView } from './lib/api/types';
   import { PALETTE_ACTIONS } from './lib/app/palette-actions';
   import { handlePaletteChoice } from './lib/app/palette-choice';
@@ -14,6 +14,7 @@
   import SettingsDialog from './lib/components/dialogs/SettingsDialog.svelte';
   import FocusView from './lib/components/focus/FocusView.svelte';
   import FilterChips from './lib/components/layout/FilterChips.svelte';
+  import JarvisButton from './lib/components/layout/JarvisButton.svelte';
   import Sidebar from './lib/components/layout/Sidebar.svelte';
   import TopBar from './lib/components/layout/TopBar.svelte';
   import ViewToggle from './lib/components/layout/ViewToggle.svelte';
@@ -28,6 +29,7 @@
   import { libraryStore } from './lib/stores/library.svelte';
   import { liveSessionsStore } from './lib/stores/live.svelte';
   import { settingsStore } from './lib/stores/settings.svelte';
+  import { toastStore } from './lib/stores/toasts.svelte';
   import { uiStore } from './lib/stores/ui.svelte';
 
   onMount(() => {
@@ -38,6 +40,7 @@
     void appInfoStore.refresh();
     void onCloseRequested((runningSessions) => (uiStore.confirmation = { kind: 'quit', runningSessions }));
     void onTrayFocusSession((key) => uiStore.focusSession(key));
+    void onNewSessionRequested(() => (uiStore.newSessionOpen = true));
     void getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (focused) void openNotifiedSession();
     });
@@ -104,6 +107,10 @@
     });
   }
 
+  function showJarvis(): void {
+    void openJarvis().catch((cause) => toastStore.failure('Não foi possível abrir o Modo Jarvis', cause));
+  }
+
   function handleShortcut(event: KeyboardEvent): void {
     const command = shortcutFor(event);
     if (!command) return;
@@ -112,6 +119,7 @@
     if (command.kind === 'palette') uiStore.paletteOpen = !uiStore.paletteOpen;
     if (command.kind === 'new-session') uiStore.newSessionOpen = true;
     if (command.kind === 'settings') uiStore.settingsOpen = true;
+    if (command.kind === 'jarvis') showJarvis();
     if (command.kind === 'session-index') {
       const session = orderedSessions[command.index];
       if (session) uiStore.focusSession(session.key);
@@ -162,7 +170,10 @@
           Sessões ativas
           <span class="total mono">{liveSessionsStore.sessions.length}</span>
         </h1>
-        <ViewToggle mode={uiStore.viewMode} onChange={(mode) => (uiStore.viewMode = mode)} />
+        <div class="header-actions">
+          <JarvisButton onOpen={showJarvis} />
+          <ViewToggle mode={uiStore.viewMode} onChange={(mode) => (uiStore.viewMode = mode)} />
+        </div>
       </div>
 
       {#if uiStore.viewMode === 'grid'}
@@ -290,6 +301,12 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
   }
 
   h1 {

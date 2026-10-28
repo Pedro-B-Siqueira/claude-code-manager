@@ -21,6 +21,9 @@ pub struct HookPayload {
     #[serde(deserialize_with = "lenient::string")]
     pub tool_name: Option<String>,
     pub tool_input: Option<ToolInput>,
+    /// Sent with `Stop` and `StopFailure`: the text of the agent's last answer.
+    #[serde(deserialize_with = "lenient::string")]
+    pub last_assistant_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

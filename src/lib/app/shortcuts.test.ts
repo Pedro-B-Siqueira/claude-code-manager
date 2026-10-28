@@ -42,6 +42,15 @@ describe('shortcuts', () => {
     expect(onLinux('K', 'KeyK', { metaKey: true })).toBeNull();
   });
 
+  it('opens the Jarvis mode with ⌘J on macOS and Ctrl+Shift+J on Linux', () => {
+    expect(onMac('j')).toEqual({ kind: 'jarvis' });
+    expect(onMac('j', { shiftKey: true })).toBeNull();
+    expect(onLinux('J', 'KeyJ')).toEqual({ kind: 'jarvis' });
+    expect(onLinux('j', 'KeyJ', { shiftKey: false })).toBeNull();
+    expect(shortcutLabel('jarvis', 'macos')).toBe('⌘J');
+    expect(shortcutLabel('jarvis', 'linux')).toBe('Ctrl+Shift+J');
+  });
+
   it('labels shortcuts for each system', () => {
     expect(shortcutLabel('palette', 'macos')).toBe('⌘K');
     expect(shortcutLabel('settings', 'macos')).toBe('⌘,');
