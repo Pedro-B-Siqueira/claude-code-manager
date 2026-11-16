@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -24,10 +24,6 @@ fn safe_area_top(_app: &AppHandle, _window: tauri::WebviewWindow) -> f64 {
 
 /// Whether the main window left full screen for the Jarvis and should go back when it closes.
 static MAIN_LEFT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
-const FULLSCREEN_EXIT_WAIT: Duration = Duration::from_secs(3);
-const FULLSCREEN_POLL: Duration = Duration::from_millis(100);
-/// The Space animation still runs for a moment after the window reports it left full screen.
-const FULLSCREEN_SETTLE: Duration = Duration::from_millis(500);
 
 pub const WINDOW_LABEL: &str = "jarvis";
 pub const SHAPE_RULES_FILE: &str = "jarvis-shapes.json";
@@ -265,22 +261,18 @@ pub fn start_measure_schedule(app: &AppHandle) {
 
 /// A window opened from one in macOS full screen lives in that window's own Space, where Mission
 /// Control still works around it and Repouso cannot cover the other Spaces. The main window leaves
-/// full screen first (and comes back when the Jarvis closes). Blocks until the animation ends, so it
-/// must not run on the main thread.
-pub fn leave_main_fullscreen(main: &tauri::WebviewWindow) -> Result<(), AppError> {
-    let window_error = |error: tauri::Error| AppError::Window(error.to_string());
-    if !cfg!(target_os = "macos") || !main.is_fullscreen().map_err(window_error)? {
+/// full screen first (and comes back when the Jarvis closes). Blocks until macOS finishes the
+/// animation, so it must not run on the main thread.
+pub fn leave_main_fullscreen(app: &AppHandle, main: &tauri::WebviewWindow) -> Result<(), AppError> {
+    if !cfg!(target_os = "macos") || !main.is_fullscreen().map_err(|error| AppError::Window(error.to_string()))? {
         return Ok(());
     }
-    main.set_fullscreen(false).map_err(window_error)?;
-    let deadline = Instant::now() + FULLSCREEN_EXIT_WAIT;
-    while main.is_fullscreen().map_err(window_error)? {
-        if Instant::now() >= deadline {
-            return Err(AppError::Window("a janela principal não saiu da tela cheia".to_owned()));
-        }
-        std::thread::sleep(FULLSCREEN_POLL);
-    }
-    std::thread::sleep(FULLSCREEN_SETTLE);
+    let started = std::time::Instant::now();
+    #[cfg(target_os = "macos")]
+    crate::fullscreen::leave_and_wait(app, main)?;
+    log::info!("janela principal saiu da tela cheia em {} ms", started.elapsed().as_millis());
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
     MAIN_LEFT_FULLSCREEN.store(true, Ordering::SeqCst);
     Ok(())
 }
@@ -293,7 +285,7 @@ pub fn open(app: &AppHandle) -> Result<(), AppError> {
     }
     let main = app.get_webview_window("main");
     if let Some(main) = &main {
-        leave_main_fullscreen(main)?;
+        leave_main_fullscreen(app, main)?;
     }
     let monitor = main.as_ref().and_then(|window| window.current_monitor().ok().flatten());
     let page = PageOptions { safe_top: main.clone().map_or(0.0, |window| safe_area_top(app, window)), ..PageOptions::from_environment() };

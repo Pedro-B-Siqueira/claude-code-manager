@@ -4,6 +4,8 @@ pub mod commands;
 pub mod context;
 pub mod db;
 pub mod error;
+#[cfg(target_os = "macos")]
+pub mod fullscreen;
 pub mod git;
 pub mod hibernation;
 pub mod hooks;
