@@ -126,6 +126,15 @@ describe('JarvisApp', () => {
     resume.mockRestore();
   });
 
+  it('keeps the HUD below the notch band, live and locked', async () => {
+    render(JarvisApp, { search: '?source=mock&safeTop=37', reducedMotion: true });
+    const hud = (await screen.findByRole('heading', { name: 'Modo Jarvis' })).closest('.hud-layer');
+    expect(hud).toHaveStyle({ paddingTop: '37px' });
+    repousoListeners.forEach((listener) => listener(LOCKED));
+    const locked = (await screen.findByRole('heading', { name: 'Repouso ativo' })).closest('.hud-layer');
+    expect(locked).toHaveStyle({ paddingTop: '37px' });
+  });
+
   it('invites a new session when nothing is running', async () => {
     render(JarvisApp, { search: '', reducedMotion: true });
     await fireEvent.click(await screen.findByRole('button', { name: 'Nova sessão' }));

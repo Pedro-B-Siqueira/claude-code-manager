@@ -18,6 +18,16 @@ describe('launchOptions', () => {
   });
 });
 
+describe('launchOptions safe area', () => {
+  it('reads how much of the top the notch band covers, never negative', () => {
+    expect(launchOptions('').safeTop).toBe(0);
+    expect(launchOptions('?safeTop=37').safeTop).toBe(37);
+    expect(launchOptions('?source=mock&safeTop=32.5').safeTop).toBe(32.5);
+    expect(launchOptions('?safeTop=-4').safeTop).toBe(0);
+    expect(launchOptions('?safeTop=abc').safeTop).toBe(0);
+  });
+});
+
 describe('clipAction', () => {
   it('keeps short actions as they are', () => {
     expect(clipAction('Edit · timeline-filter.component.ts')).toBe('Edit · timeline-filter.component.ts');

@@ -3,12 +3,31 @@
 //! mock sessions for the scene.
 
 use std::path::Path;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::error::AppError;
+
+/// The notch band over full-screen spaces; only Macs have one.
+#[cfg(target_os = "macos")]
+fn safe_area_top(app: &AppHandle, window: tauri::WebviewWindow) -> f64 {
+    crate::screen::safe_area_top(app, window)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn safe_area_top(_app: &AppHandle, _window: tauri::WebviewWindow) -> f64 {
+    0.0
+}
+
+/// Whether the main window left full screen for the Jarvis and should go back when it closes.
+static MAIN_LEFT_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+const FULLSCREEN_EXIT_WAIT: Duration = Duration::from_secs(3);
+const FULLSCREEN_POLL: Duration = Duration::from_millis(100);
+/// The Space animation still runs for a moment after the window reports it left full screen.
+const FULLSCREEN_SETTLE: Duration = Duration::from_millis(500);
 
 pub const WINDOW_LABEL: &str = "jarvis";
 pub const SHAPE_RULES_FILE: &str = "jarvis-shapes.json";
@@ -181,6 +200,8 @@ pub struct PageOptions {
     pub mock: bool,
     /// Canvas backing-scale cap, to compare memory and CPU across values.
     pub pixel_ratio: Option<f64>,
+    /// Points the HUD keeps clear at the top (the notch band); set for every build.
+    pub safe_top: f64,
 }
 
 impl PageOptions {
@@ -189,7 +210,7 @@ impl PageOptions {
             return Self::default();
         }
         let pixel_ratio = std::env::var(PIXEL_RATIO_ENV).ok().and_then(|value| value.trim().parse::<f64>().ok()).filter(|ratio| ratio.is_finite() && *ratio > 0.0);
-        Self { mock: mock_source().is_some(), pixel_ratio }
+        Self { mock: mock_source().is_some(), pixel_ratio, safe_top: 0.0 }
     }
 }
 
@@ -200,6 +221,9 @@ pub fn page_url(options: &PageOptions) -> String {
     }
     if let Some(ratio) = options.pixel_ratio {
         parameters.push(format!("pixelRatio={ratio}"));
+    }
+    if options.safe_top > 0.0 {
+        parameters.push(format!("safeTop={}", options.safe_top));
     }
     if parameters.is_empty() { "jarvis.html".to_owned() } else { format!("jarvis.html?{}", parameters.join("&")) }
 }
@@ -239,6 +263,28 @@ pub fn start_measure_schedule(app: &AppHandle) {
     });
 }
 
+/// A window opened from one in macOS full screen lives in that window's own Space, where Mission
+/// Control still works around it and Repouso cannot cover the other Spaces. The main window leaves
+/// full screen first (and comes back when the Jarvis closes). Blocks until the animation ends, so it
+/// must not run on the main thread.
+pub fn leave_main_fullscreen(main: &tauri::WebviewWindow) -> Result<(), AppError> {
+    let window_error = |error: tauri::Error| AppError::Window(error.to_string());
+    if !cfg!(target_os = "macos") || !main.is_fullscreen().map_err(window_error)? {
+        return Ok(());
+    }
+    main.set_fullscreen(false).map_err(window_error)?;
+    let deadline = Instant::now() + FULLSCREEN_EXIT_WAIT;
+    while main.is_fullscreen().map_err(window_error)? {
+        if Instant::now() >= deadline {
+            return Err(AppError::Window("a janela principal não saiu da tela cheia".to_owned()));
+        }
+        std::thread::sleep(FULLSCREEN_POLL);
+    }
+    std::thread::sleep(FULLSCREEN_SETTLE);
+    MAIN_LEFT_FULLSCREEN.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
 /// Opens the Jarvis mode full screen on the main window's monitor, or brings it forward if open.
 pub fn open(app: &AppHandle) -> Result<(), AppError> {
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
@@ -246,8 +292,12 @@ pub fn open(app: &AppHandle) -> Result<(), AppError> {
         return Ok(());
     }
     let main = app.get_webview_window("main");
+    if let Some(main) = &main {
+        leave_main_fullscreen(main)?;
+    }
     let monitor = main.as_ref().and_then(|window| window.current_monitor().ok().flatten());
-    let mut builder = WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::App(page_url(&PageOptions::from_environment()).into()))
+    let page = PageOptions { safe_top: main.clone().map_or(0.0, |window| safe_area_top(app, window)), ..PageOptions::from_environment() };
+    let mut builder = WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::App(page_url(&page).into()))
         .title("Modo Jarvis")
         .decorations(false)
         .background_color(BACKGROUND)
@@ -284,6 +334,13 @@ pub fn close(app: &AppHandle) {
         }
     }
     crate::tray::show_main_window(app);
+    if MAIN_LEFT_FULLSCREEN.swap(false, Ordering::SeqCst) {
+        if let Some(main) = app.get_webview_window("main") {
+            if let Err(error) = main.set_fullscreen(true) {
+                log::warn!("falha ao devolver a tela cheia da janela principal: {error}");
+            }
+        }
+    }
 }
 
 /// Leaves the Jarvis mode and asks the main window to show something: a session or the new-session dialog.
@@ -355,9 +412,16 @@ mod tests {
     #[test]
     fn the_page_asks_for_mocks_and_a_pixel_ratio_only_when_told_to() {
         assert_eq!(page_url(&PageOptions::default()), "jarvis.html");
-        assert_eq!(page_url(&PageOptions { mock: true, pixel_ratio: None }), "jarvis.html?source=mock");
-        assert_eq!(page_url(&PageOptions { mock: true, pixel_ratio: Some(2.0) }), "jarvis.html?source=mock&pixelRatio=2");
-        assert_eq!(page_url(&PageOptions { mock: false, pixel_ratio: Some(1.5) }), "jarvis.html?pixelRatio=1.5");
+        assert_eq!(page_url(&PageOptions { mock: true, ..PageOptions::default() }), "jarvis.html?source=mock");
+        assert_eq!(page_url(&PageOptions { mock: true, pixel_ratio: Some(2.0), ..PageOptions::default() }), "jarvis.html?source=mock&pixelRatio=2");
+        assert_eq!(page_url(&PageOptions { pixel_ratio: Some(1.5), ..PageOptions::default() }), "jarvis.html?pixelRatio=1.5");
+    }
+
+    #[test]
+    fn the_page_learns_how_much_of_the_top_the_notch_band_covers() {
+        assert_eq!(page_url(&PageOptions { safe_top: 37.0, ..PageOptions::default() }), "jarvis.html?safeTop=37");
+        assert_eq!(page_url(&PageOptions { mock: true, safe_top: 32.5, ..PageOptions::default() }), "jarvis.html?source=mock&safeTop=32.5");
+        assert_eq!(page_url(&PageOptions { safe_top: 0.0, ..PageOptions::default() }), "jarvis.html");
     }
 
     #[test]
