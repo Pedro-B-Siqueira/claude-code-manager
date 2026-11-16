@@ -108,7 +108,7 @@ mod macos {
 
         fn hide_main_window(&self) -> Result<(), AppError> {
             let Some(main) = self.app.get_webview_window("main") else { return Ok(()) };
-            jarvis::leave_main_fullscreen(&main)?;
+            jarvis::leave_main_fullscreen(&self.app, &main)?;
             main.hide().map_err(window_error)
         }
 

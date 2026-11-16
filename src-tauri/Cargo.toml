@@ -4,7 +4,7 @@ resolver = "3"
 
 [package]
 name = "claude-code-manager"
-version = "0.2.1"
+version = "0.2.2"
 description = "Gerenciador leve de sessoes do Claude Code"
 edition = "2024"
 rust-version = "1.85"
@@ -45,7 +45,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # code is downloaded; only the features below are compiled in addition.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSError"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSError", "NSNotification", "NSOperation", "NSString"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSScreen", "NSWindow"] }
 block2 = "0.6"
 
