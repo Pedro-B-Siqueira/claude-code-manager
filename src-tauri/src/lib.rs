@@ -12,12 +12,16 @@ pub mod layout;
 pub mod library;
 pub mod links;
 pub mod live;
+#[cfg(target_os = "macos")]
+pub mod main_thread;
 pub mod notifications;
 pub mod paths;
 pub mod platform;
 pub mod pricing;
 pub mod pty;
 pub mod repouso;
+#[cfg(target_os = "macos")]
+pub mod screen;
 pub mod sessions;
 pub mod settings;
 pub mod shell_env;

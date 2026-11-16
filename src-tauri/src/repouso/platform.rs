@@ -14,22 +14,22 @@ mod macos {
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex, mpsc};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use objc2::MainThreadMarker;
     use tauri::menu::Menu;
     use tauri::{AppHandle, Manager, Monitor, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
 
     use super::LOCK_WINDOW_PREFIX;
     use crate::error::AppError;
     use crate::jarvis;
+    use crate::main_thread::on_main_thread;
     use crate::repouso::lock::{LockInfo, LockPlatform, LockStep};
     use crate::repouso::native::{self, LOCK_WINDOW_LEVEL, NORMAL_WINDOW_LEVEL};
     use crate::repouso::pending::{DISPLAY_OFF, PENDING_FILE, PendingLock, remove_pending, watchdog_command, write_pending};
 
-    const MAIN_THREAD_WAIT: Duration = Duration::from_secs(5);
     const SCREEN_CHECK: Duration = Duration::from_secs(1);
+    const FOCUS_CHECK: Duration = Duration::from_millis(250);
     const LOCK_BACKGROUND: tauri::window::Color = tauri::window::Color(10, 10, 10, 255);
 
     #[derive(Default)]
@@ -44,7 +44,11 @@ mod macos {
         helpers: Mutex<Helpers>,
         saved_presentation: Mutex<Option<usize>>,
         saved_menu: Mutex<Option<Menu<Wry>>>,
+        saved_jarvis_behavior: Mutex<Option<usize>>,
         covering: Arc<AtomicBool>,
+        holding_focus: Arc<AtomicBool>,
+        /// The system Touch ID / password prompt needs the focus; holding it would hide the prompt.
+        prompting: Arc<AtomicBool>,
     }
 
     impl AppLockPlatform {
@@ -55,7 +59,10 @@ mod macos {
                 helpers: Mutex::default(),
                 saved_presentation: Mutex::default(),
                 saved_menu: Mutex::default(),
+                saved_jarvis_behavior: Mutex::default(),
                 covering: Arc::default(),
+                holding_focus: Arc::default(),
+                prompting: Arc::default(),
             }
         }
 
@@ -99,17 +106,29 @@ mod macos {
             Ok(())
         }
 
+        fn hide_main_window(&self) -> Result<(), AppError> {
+            let Some(main) = self.app.get_webview_window("main") else { return Ok(()) };
+            jarvis::leave_main_fullscreen(&main)?;
+            main.hide().map_err(window_error)
+        }
+
         fn lock_jarvis_window(&self) -> Result<(), AppError> {
             jarvis::open(&self.app)?;
             let window = jarvis_window(&self.app)?;
             window.set_minimizable(false).map_err(window_error)?;
             window.set_visible_on_all_workspaces(true).map_err(window_error)?;
+            let previous = pin_to_every_space(&self.app, window.clone())?;
+            *self.saved_jarvis_behavior.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(previous);
             set_level(&self.app, window.clone(), LOCK_WINDOW_LEVEL)?;
             window.set_focus().map_err(window_error)
         }
 
         fn unlock_jarvis_window(&self) {
             let Ok(window) = jarvis_window(&self.app) else { return };
+            let saved = self.saved_jarvis_behavior.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+            if let Some(bits) = saved {
+                restore_behavior(&self.app, window.clone(), bits);
+            }
             let _ = set_level(&self.app, window.clone(), NORMAL_WINDOW_LEVEL);
             let _ = window.set_minimizable(true);
             let _ = window.set_visible_on_all_workspaces(false);
@@ -156,6 +175,27 @@ mod macos {
             self.covering.store(false, Ordering::SeqCst);
             close_lock_windows(&self.app);
         }
+
+        /// Kiosk options block ⌘Tab but not an app activating itself (`open <url>` from a session):
+        /// macOS then switches to that app and its Space. This takes the focus back a moment later.
+        fn hold_focus(&self) -> Result<(), AppError> {
+            self.holding_focus.store(true, Ordering::SeqCst);
+            let app = self.app.clone();
+            let holding = Arc::clone(&self.holding_focus);
+            let prompting = Arc::clone(&self.prompting);
+            std::thread::Builder::new().name("repouso-focus".to_owned()).spawn(move || {
+                while holding.load(Ordering::SeqCst) {
+                    std::thread::sleep(FOCUS_CHECK);
+                    if !holding.load(Ordering::SeqCst) || prompting.load(Ordering::SeqCst) {
+                        continue;
+                    }
+                    if let Err(error) = reclaim_focus(&app) {
+                        log::warn!("Repouso: falha ao retomar o foco: {error}");
+                    }
+                }
+            })?;
+            Ok(())
+        }
     }
 
     impl LockPlatform for AppLockPlatform {
@@ -164,11 +204,12 @@ mod macos {
                 LockStep::PendingFlag => write_pending(&self.app_support, &PendingLock { app_pid: std::process::id(), since: lock.since_ms, watchdog_pid: None }),
                 LockStep::Watchdog => self.start_watchdog(lock),
                 LockStep::NoSleep => self.start_caffeinate(),
-                LockStep::HideMainWindow => self.app.get_webview_window("main").map_or(Ok(()), |main| main.hide().map_err(window_error)),
+                LockStep::HideMainWindow => self.hide_main_window(),
                 LockStep::LockJarvisWindow => self.lock_jarvis_window(),
                 LockStep::RemoveAppMenu => self.remove_app_menu(),
                 LockStep::Kiosk => self.enter_kiosk(),
                 LockStep::CoverScreens => self.cover_screens(),
+                LockStep::HoldFocus => self.hold_focus(),
             }
         }
 
@@ -186,10 +227,12 @@ mod macos {
                 LockStep::RemoveAppMenu => self.restore_app_menu(),
                 LockStep::Kiosk => self.leave_kiosk(),
                 LockStep::CoverScreens => self.uncover_screens(),
+                LockStep::HoldFocus => self.holding_focus.store(false, Ordering::SeqCst),
             }
         }
 
         fn set_prompt_mode(&self, prompting: bool) {
+            self.prompting.store(prompting, Ordering::SeqCst);
             let level = if prompting { NORMAL_WINDOW_LEVEL } else { LOCK_WINDOW_LEVEL };
             for (label, window) in self.app.webview_windows() {
                 if label == jarvis::WINDOW_LABEL || label.starts_with(LOCK_WINDOW_PREFIX) {
@@ -220,25 +263,49 @@ mod macos {
         }
     }
 
-    /// AppKit must be called on the main thread; this runs `work` there and waits for its result.
-    /// Callers are command and helper threads, never the main thread itself.
-    fn on_main_thread<T: Send + 'static>(app: &AppHandle, work: impl FnOnce(MainThreadMarker) -> T + Send + 'static) -> Result<T, AppError> {
-        let (sender, receiver) = mpsc::channel();
-        app.run_on_main_thread(move || {
-            if let Some(main_thread) = MainThreadMarker::new() {
-                let _ = sender.send(work(main_thread));
-            }
-        })
-        .map_err(window_error)?;
-        receiver.recv_timeout(MAIN_THREAD_WAIT).map_err(|_| AppError::Window("a thread principal não respondeu".to_owned()))
+    /// A window without its NSWindow (already closing) cannot be locked: the step fails and the lock
+    /// is undone, instead of going on with a window that covers nothing.
+    fn set_level(app: &AppHandle, window: WebviewWindow, level: isize) -> Result<(), AppError> {
+        on_main_thread(app, move |_| {
+            let ns_window = window.ns_window().map_err(window_error)?;
+            // SAFETY: the pointer is this live window's own NSWindow, used here on the main thread.
+            unsafe { native::set_window_level(ns_window, level) };
+            Ok(())
+        })?
     }
 
-    fn set_level(app: &AppHandle, window: WebviewWindow, level: isize) -> Result<(), AppError> {
-        on_main_thread(app, move |_| match window.ns_window() {
+    /// Returns the window's previous collection behavior.
+    fn pin_to_every_space(app: &AppHandle, window: WebviewWindow) -> Result<usize, AppError> {
+        on_main_thread(app, move |_| {
+            let ns_window = window.ns_window().map_err(window_error)?;
             // SAFETY: the pointer is this live window's own NSWindow, used here on the main thread.
-            Ok(ns_window) => unsafe { native::set_window_level(ns_window, level) },
-            Err(error) => log::warn!("Repouso: janela sem NSWindow: {error}"),
-        })
+            Ok(unsafe { native::pin_to_every_space(ns_window) })
+        })?
+    }
+
+    fn restore_behavior(app: &AppHandle, window: WebviewWindow, bits: usize) {
+        let restored = on_main_thread(app, move |_| {
+            if let Ok(ns_window) = window.ns_window() {
+                // SAFETY: the pointer is this live window's own NSWindow, used here on the main thread.
+                unsafe { native::restore_collection_behavior(ns_window, bits) };
+            }
+        });
+        if let Err(error) = restored {
+            log::warn!("Repouso: falha ao devolver o comportamento da janela do Jarvis: {error}");
+        }
+    }
+
+    fn reclaim_focus(app: &AppHandle) -> Result<(), AppError> {
+        let window = jarvis_window(app)?;
+        let reclaimed = on_main_thread(app, move |main_thread| match window.ns_window() {
+            // SAFETY: the pointer is this live window's own NSWindow, used here on the main thread.
+            Ok(ns_window) => unsafe { native::reclaim_focus(main_thread, ns_window) },
+            Err(_) => false,
+        })?;
+        if reclaimed {
+            log::info!("Repouso: outro app tomou o foco; foco devolvido ao Jarvis");
+        }
+        Ok(())
     }
 
     fn display_key(monitor: &Monitor) -> (i32, i32, u32, u32) {
@@ -280,6 +347,7 @@ mod macos {
             .inner_size(size.width, size.height)
             .build()
             .map_err(window_error)?;
+        pin_to_every_space(app, window.clone())?;
         set_level(app, window, LOCK_WINDOW_LEVEL)
     }
 

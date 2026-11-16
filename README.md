@@ -58,7 +58,7 @@ O app resolve isso lendo o que o próprio Claude Code já grava em disco, sem mu
 
 ![Tema claro](docs/images/grade-claro.png)
 
-**Modo Jarvis (⌘J).** Uma tela cheia com as sessões abertas num holograma 3D que dá para girar. Cada repositório vira uma forma de arame, na cor da sessão mais urgente dele, e cada sessão é um satélite com um balão dizendo o que o agente está fazendo agora: a ferramenta e o arquivo da última ação, a pergunta que ele fez ou a última linha da resposta. Clicar num balão gira o projeto para a frente e mostra a branch, os dois últimos eventos e um atalho para abrir a sessão. Esc fecha. O modo abre numa janela própria, criada na hora e destruída ao sair, então nada dele fica carregado enquanto está fechado.
+**Modo Jarvis (⌘J).** Uma tela cheia com as sessões abertas num holograma 3D que dá para girar. Cada repositório vira uma forma de arame, na cor da sessão mais urgente dele, e cada sessão é um satélite com um balão dizendo o que o agente está fazendo agora: a ferramenta e o arquivo da última ação, a pergunta que ele fez ou a última linha da resposta. Clicar num balão gira o projeto para a frente e mostra a branch, os dois últimos eventos e um atalho para abrir a sessão. Esc fecha. O modo abre numa janela própria, criada na hora e destruída ao sair, então nada dele fica carregado enquanto está fechado. No macOS, se a janela principal estiver em tela cheia, ela sai da tela cheia antes de o Jarvis abrir e volta para ela quando ele fecha: assim o Jarvis fica numa mesa comum e o Repouso consegue cobrir todas as mesas.
 
 ![Modo Jarvis com quatro sessões em três projetos](docs/images/jarvis.png)
 
@@ -137,7 +137,7 @@ Sem configuração, cada repositório vira um cristal, com uma variação que de
 
 ## Repouso: o que ele protege
 
-O Repouso tira do alcance o que daria para fazer sem a senha: trocar de app (⌘Tab, Mission Control, cantos ativos), Forçar Encerrar, ⌘Q, ⌘H, ⌘W, ⌘M, Dock, barra de menus, menu Apple, logout e a janela principal do app, que daria acesso aos terminais. Monitores extras ficam cobertos por uma tela simples, inclusive os conectados no meio do caminho. Num teste num Mac real, nada disso deixou sair.
+O Repouso tira do alcance o que daria para fazer sem a senha: trocar de app (⌘Tab, Mission Control, cantos ativos), Forçar Encerrar, ⌘Q, ⌘H, ⌘W, ⌘M, Dock, barra de menus, menu Apple, logout e a janela principal do app, que daria acesso aos terminais. Monitores extras ficam cobertos por uma tela simples, inclusive os conectados no meio do caminho. As telas do bloqueio aparecem em todas as mesas, e se outro app se ativar sozinho (uma sessão abrindo um link no navegador, por exemplo), o app toma o foco de volta em até um quarto de segundo, então nem a tela nem o teclado ficam com o outro app. Num teste num Mac real, nada disso deixou sair.
 
 Ele **não substitui** a tela de bloqueio do macOS:
 

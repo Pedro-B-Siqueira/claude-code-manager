@@ -256,7 +256,8 @@
     {/each}
   </div>
 
-  <div class="hud-layer" bind:clientHeight={hudHeight}>
+  <!-- On a Mac with a notch, the menu bar strip stays black over full-screen spaces and would hide the HUD. -->
+  <div class="hud-layer" style:padding-top="{options.safeTop}px" bind:clientHeight={hudHeight}>
     {#if lock.active}
       <LockedHeader since={lock.since ?? now} summary={lockedSummary(store.sessions)} />
     {:else}

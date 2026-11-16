@@ -4,6 +4,7 @@
 //! ask `is_locked` meanwhile.
 
 use std::sync::{Mutex, MutexGuard};
+use std::time::Instant;
 
 use serde::Serialize;
 
@@ -29,9 +30,11 @@ pub enum LockStep {
     Kiosk,
     /// A lock window on every other display, including ones connected later.
     CoverScreens,
+    /// Takes the focus back whenever another app gets it, say a browser a session opened a link in.
+    HoldFocus,
 }
 
-pub const LOCK_STEPS: [LockStep; 8] = [
+pub const LOCK_STEPS: [LockStep; 9] = [
     LockStep::PendingFlag,
     LockStep::Watchdog,
     LockStep::NoSleep,
@@ -40,6 +43,7 @@ pub const LOCK_STEPS: [LockStep; 8] = [
     LockStep::RemoveAppMenu,
     LockStep::Kiosk,
     LockStep::CoverScreens,
+    LockStep::HoldFocus,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,14 +111,19 @@ impl<P: LockPlatform> Repouso<P> {
         }
         let info = LockInfo { since_ms: now_ms };
         let mut engaged = Vec::with_capacity(LOCK_STEPS.len());
+        let started = Instant::now();
         for step in LOCK_STEPS {
-            if let Err(error) = self.platform.engage(step, &info) {
+            let step_started = Instant::now();
+            let outcome = self.platform.engage(step, &info);
+            log::info!("Repouso: etapa {step:?} em {} ms", step_started.elapsed().as_millis());
+            if let Err(error) = outcome {
                 engaged.iter().rev().for_each(|done| self.platform.release(*done));
                 *self.state() = LockState::Off { show_details };
                 return Err(error);
             }
             engaged.push(step);
         }
+        log::info!("Repouso: travado em {} ms", started.elapsed().as_millis());
         let mut state = self.state();
         *state = LockState::Locked { since_ms: now_ms, show_details, authenticating: false };
         Ok(snapshot_of(*state))
@@ -228,7 +237,7 @@ mod tests {
         (platform, repouso)
     }
 
-    const ENGAGED_IN_ORDER: [&str; 8] = [
+    const ENGAGED_IN_ORDER: [&str; 9] = [
         "engage PendingFlag",
         "engage Watchdog",
         "engage NoSleep",
@@ -237,6 +246,7 @@ mod tests {
         "engage RemoveAppMenu",
         "engage Kiosk",
         "engage CoverScreens",
+        "engage HoldFocus",
     ];
 
     #[test]
@@ -264,7 +274,7 @@ mod tests {
         let (platform, repouso) = repouso(FakePlatform::default());
         repouso.activate(false, 1_000).unwrap();
         let again = repouso.activate(true, 2_000).unwrap();
-        assert_eq!(platform.calls().len(), 8);
+        assert_eq!(platform.calls().len(), ENGAGED_IN_ORDER.len());
         assert_eq!(again.since, Some(1_000));
         assert!(!again.show_details);
     }
@@ -275,11 +285,12 @@ mod tests {
         repouso.activate(true, 1_000).unwrap();
         assert_eq!(repouso.unlock(), UnlockOutcome::Unlocked);
         assert_eq!(
-            platform.calls()[8..],
+            platform.calls()[ENGAGED_IN_ORDER.len()..],
             [
                 "prompt true",
                 "authenticate",
                 "prompt false",
+                "release HoldFocus",
                 "release CoverScreens",
                 "release Kiosk",
                 "release RemoveAppMenu",
@@ -298,7 +309,7 @@ mod tests {
         let (platform, repouso) = repouso(FakePlatform { approves: false, ..FakePlatform::default() });
         repouso.activate(true, 1_000).unwrap();
         assert_eq!(repouso.unlock(), UnlockOutcome::Refused);
-        assert_eq!(platform.calls()[8..], ["prompt true", "authenticate", "prompt false"]);
+        assert_eq!(platform.calls()[ENGAGED_IN_ORDER.len()..], ["prompt true", "authenticate", "prompt false"]);
         assert!(repouso.is_locked());
         assert!(!repouso.snapshot().authenticating);
     }

@@ -8,7 +8,7 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{MainThreadMarker, class, msg_send};
-use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions, NSWindow};
+use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::{NSError, NSString};
 
 #[link(name = "LocalAuthentication", kind = "framework")]
@@ -53,6 +53,48 @@ pub unsafe fn set_window_level(ns_window: *mut c_void, level: isize) {
     // SAFETY: guaranteed by the caller; Tauri hands out the window's own NSWindow pointer.
     let window = unsafe { &*ns_window.cast::<NSWindow>() };
     window.setLevel(level);
+}
+
+/// On every Space, including other apps' full-screen ones: a link a session opens in the browser
+/// makes macOS switch Spaces, and the lock has to be there too. Returns the previous behavior.
+///
+/// # Safety
+/// `ns_window` must be the `NSWindow` of a live Tauri window, used on the main thread.
+pub unsafe fn pin_to_every_space(ns_window: *mut c_void) -> usize {
+    // SAFETY: guaranteed by the caller.
+    let window = unsafe { &*ns_window.cast::<NSWindow>() };
+    let previous = window.collectionBehavior();
+    window.setCollectionBehavior(
+        previous | NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary | NSWindowCollectionBehavior::Stationary,
+    );
+    previous.bits()
+}
+
+/// # Safety
+/// `ns_window` must be the `NSWindow` of a live Tauri window, used on the main thread.
+pub unsafe fn restore_collection_behavior(ns_window: *mut c_void, bits: usize) {
+    // SAFETY: guaranteed by the caller.
+    let window = unsafe { &*ns_window.cast::<NSWindow>() };
+    window.setCollectionBehavior(NSWindowCollectionBehavior::from_bits_truncate(bits));
+}
+
+/// Takes the focus back when another app got it (or the Space changed) while locked, so neither the
+/// screen nor the keyboard reach that app. Returns whether anything had to be done.
+///
+/// # Safety
+/// `ns_window` must be the `NSWindow` of a live Tauri window, used on the main thread.
+pub unsafe fn reclaim_focus(main_thread: MainThreadMarker, ns_window: *mut c_void) -> bool {
+    // SAFETY: guaranteed by the caller.
+    let window = unsafe { &*ns_window.cast::<NSWindow>() };
+    let application = NSApplication::sharedApplication(main_thread);
+    if application.isActive() && window.isOnActiveSpace() && window.isKeyWindow() {
+        return false;
+    }
+    #[allow(deprecated)]
+    application.activateIgnoringOtherApps(true);
+    window.orderFrontRegardless();
+    window.makeKeyAndOrderFront(None);
+    true
 }
 
 /// Asks macOS for Touch ID or the user's password. The app never sees nor stores the password.

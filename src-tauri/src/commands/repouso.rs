@@ -57,7 +57,9 @@ fn announce(app: &AppHandle, snapshot: LockSnapshot) {
 /// What the activation dialog needs: whether the screen locks at once, and the remembered choice.
 #[tauri::command]
 pub fn repouso_prepare(state: State<'_, AppState>) -> RepousoPreparation {
+    let started = std::time::Instant::now();
     let lock_delay = if cfg!(target_os = "macos") { read_lock_delay() } else { LockDelay::Unknown };
+    log::info!("Repouso: diálogo preparado em {} ms", started.elapsed().as_millis());
     RepousoPreparation { lock_delay, show_details: load_show_details(&state.database) }
 }
 
@@ -66,6 +68,7 @@ pub async fn repouso_activate(app: AppHandle, state: State<'_, AppState>, show_d
     if let Err(error) = save_show_details(&state.database, show_details) {
         log::warn!("não foi possível lembrar a escolha do Repouso: {error}");
     }
+    log::info!("Repouso: ativação pedida pela interface");
     let repouso = repouso(&state)?;
     let snapshot = repouso.activate(show_details, now_ms())?;
     announce(&app, snapshot);
